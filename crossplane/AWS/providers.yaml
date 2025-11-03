@@ -1,0 +1,26 @@
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: upbound-provider-aws-sqs
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-sqs:v2
+
+---
+
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: upbound-provider-aws-cloudwatchevents
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-cloudwatchevents:v2
+
+---
+
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: upbound-provider-aws-iam
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-iam:v2
+
+---

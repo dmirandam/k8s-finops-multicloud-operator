@@ -1,0 +1,216 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: awsinfra-eks
+spec:
+  compositeTypeRef:
+    apiVersion: aws.kfo.io/v1alpha1
+    kind: awsinfra
+  mode: Pipeline
+  pipeline:
+
+  - step: cluster-creation
+    functionRef:
+      name: crossplane-contrib-function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      resources:
+     
+      - name: eks-cluster
+        base:
+          apiVersion: eks.aws.m.upbound.io/v1beta1
+          kind: Cluster
+          metadata:
+            name: cluster-name-placeholder
+            namespace: upbound-namespace-placeholder
+          spec:
+            forProvider:
+              region: aws-region-placeholder
+              version: eks-version-placeholder
+              tags:
+                karpenter.sh/discovery: eks-cluster-name-placeholder
+        patches:
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.cluster_name
+            toFieldPath: metadata.name
+          - fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace         
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region   
+          - fromFieldPath: spec.k8s_version
+            toFieldPath: spec.forProvider.version
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.cluster_name
+            toFieldPath: spec.forProvider.tags["karpenter.sh/discovery"]
+
+
+      - name: node-group
+        base:
+          apiVersion: eks.aws.m.upbound.io/v1beta1
+          kind: NodeGroup
+          metadata:
+            name: eks-node-group-name-placeholder
+            namespace: upbound-namespace-placeholder
+          spec:
+            forProvider:
+              instanceTypes: m5.large
+              clusterNameRef:
+                name: eks-cluster-name-placeholder 
+              nodeRoleArnRef:
+                name: eks-node-role-name-placeholder
+              region: region-placeholder
+              scalingConfig:
+                desiredSize: 2
+                maxSize: 3
+                minSize: 1
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "%s-ng"
+            toFieldPath: metadata.name
+          - fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace         
+          - fromFieldPath: spec.cluster_name
+            toFieldPath: spec.forProvider.clusterNameRef.name
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "karpenter-node-role-%s"
+            toFieldPath: spec.forProvider.roleArnRef.name
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region    
+
+      - name: addon
+        base:        
+          apiVersion: eks.aws.m.upbound.io/v1beta1
+          kind: Addon
+          metadata:
+            name: eks-pod-identity-agent
+            namespace: upbound-namespace-placeholder
+          spec:
+            forProvider:
+              addonName: eks-pod-identity-agent
+              clusterName: cluster-name-placeholder
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "identity-agent-%s"
+            toFieldPath: metadata.name
+          - fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.cluster_name
+            toFieldPath: spec.forProvider.clusterName
+
+      - name: pod-identity
+        base:
+          apiVersion: eks.aws.m.upbound.io/v1beta1
+          kind: PodIdentityAssociation
+          metadata:
+            name: example-pia
+            namespace: upbound-namespace-placeholder
+          spec:
+            forProvider:
+              serviceAccount: default
+              namespace: karpenter-namespace-placeholder
+              region: aws-region-placeholder
+              clusterNameRef:
+                name: cluster-name-placeholder
+                namespace: upbound-namespace-placeholder
+              roleArnRef:
+                name: karpenter-controller-role-placeholder
+                namespace: upbound-namespace-placeholder
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "pod-identity-%s"
+            toFieldPath: metadata.name
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.clusterNameRef.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.roleArnRef.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.karpenter_namespace
+            toFieldPath: spec.forProvider.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.cluster_name
+            toFieldPath: spec.forProvider.clusterNameRef.name
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "%s-karpenter-controller-role"
+            toFieldPath: spec.forProvider.roleArnRef.name
+      
+      - name: access-entry
+        base:
+          apiVersion: eks.aws.m.upbound.io/v1beta1
+          kind: AccessEntry
+          metadata:
+            name: access-entry
+            namespace: upbound-system
+          spec:
+            forProvider:
+              region: us-east-2
+              type: STANDARD
+              clusterName: cluster-name-placeholder
+              kubernetesGroups:
+                - system:bootstrappers
+                - system:nodes
+              principalArnFromRoleRef:
+                name: karpenter-controller-role-placeholder
+                namespace: upbound-namespace-placeholder
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "access-entry-%s"
+            toFieldPath: metadata.name
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.cluster_name
+            toFieldPath: spec.forProvider.clusterName
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "karpenter-node-role-%s"
+            toFieldPath: spec.forProvider.principalArnFromRoleRef.name
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.principalArnFromRoleRef.namespace

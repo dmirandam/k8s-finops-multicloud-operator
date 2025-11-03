@@ -1,0 +1,11 @@
+apiVersion: aws.kfo.io/v1alpha1
+kind: awsinfra
+metadata:
+  name: eks-demo
+  namespace: crossplane-system       
+spec:
+  crossplane:
+    compositionRef:
+      name: awsinfra-iam         
+  cluster_name: eks-dsmm
+  upbound_namespace: crossplane-system

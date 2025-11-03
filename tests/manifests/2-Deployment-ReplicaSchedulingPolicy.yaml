@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: demo
+spec:
+  replicas: 10
+  selector: { matchLabels: { app: web } }
+  template:
+    metadata: { labels: { app: web } }
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.27
+        ports: [{containerPort: 80}]
+---
+apiVersion: policy.karmada.io/v1alpha1
+kind: ReplicaSchedulingPolicy
+metadata:
+  name: web-rsp
+  namespace: demo
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web
+  policy:
+    replicaDivisionPreference: Weighted    # divide réplicas
+    replicasByWeight:
+      staticWeightList:
+      - targetCluster:
+          clusterNames: ["microk8s-cluster-1"]
+        weight: 1
+      - targetCluster:
+          clusterNames: ["microk8s-cluster-2"]
+        weight: 2
+  placement:
+    clusterAffinity:
+      clusterNames: ["microk8s-cluster-1","microk8s-cluster-2"]

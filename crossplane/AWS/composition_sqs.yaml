@@ -1,0 +1,377 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: awsinfra-sqs
+spec:
+  compositeTypeRef:
+    apiVersion: aws.kfo.io/v1alpha1
+    kind: awsinfra
+  mode: Pipeline
+  pipeline:
+
+  - step: sqs-creation
+    functionRef:
+      name: crossplane-contrib-function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      resources:
+     
+      - name: karpenter-sqs-interruption-queue
+        base:     
+          apiVersion: sqs.aws.m.upbound.io/v1beta1
+          kind: Queue
+          metadata:
+            name: name-placeholder
+            namespace: upbound-system
+          spec:
+            forProvider:
+              messageRetentionSeconds: 300
+              name: upbound-sqs-with-policy
+              sqsManagedSseEnabled: true
+              policy: | #TODO: Replace REGION and ACCOUNT_ID with variables
+                {
+                  "Id": "EC2InterruptionPolicy",
+                  "Version": "2012-10-17",
+                  "Statement": [
+                    {
+                      "Effect": "Allow",
+                      "Principal": {
+                        "Service": [
+                          "events.amazonaws.com",
+                          "sqs.amazonaws.com"
+                        ]
+                      },
+                      "Action": "sqs:SendMessage",
+                      "Resource": "arn:aws:sqs:REGION:ACCOUNT_ID:KarpenterInterruptionQueue"
+                    },
+                    {
+                      "Sid": "DenyHTTP",
+                      "Effect": "Deny",
+                      "Principal": "*",
+                      "Action": "sqs:*",
+                      "Resource": "arn:aws:sqs:REGION:ACCOUNT_ID:KarpenterInterruptionQueue",
+                      "Condition": {
+                        "Bool": {
+                          "aws:SecureTransport": "false"
+                        }
+                      }
+                    }
+                  ]
+                }
+              region: placeholder-region
+        patches:
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.cluster_name
+            toFieldPath: metadata.name
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region
+
+
+  - step: sqs-policies-attachment
+    functionRef:
+      name: crossplane-contrib-function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      resources:
+     
+      - name: karpenter-sqs-interruption-queue
+        base:  
+          apiVersion: sqs.aws.m.upbound.io/v1beta1
+          kind: QueuePolicy
+          metadata:
+            annotations:
+              meta.upbound.io/example-id: sqs/v1beta1/queue-policy
+            name: KarpenterInterruptionQueuePolicy
+            namespace: namespace-placeholder
+          spec:
+            forProvider:
+              policy: | #TODO: Replace REGION and ACCOUNT_ID with variables
+                {
+                  "Id": "EC2InterruptionPolicy",
+                  "Version": "2012-10-17",
+                  "Statement": [
+                    {
+                      "Effect": "Allow",
+                      "Principal": {
+                        "Service": [
+                          "events.amazonaws.com",
+                          "sqs.amazonaws.com"
+                        ]
+                      },
+                      "Action": "sqs:SendMessage",
+                      "Resource": "arn:aws:sqs:REGION:ACCOUNT_ID:karpenter-interruption-queue"
+                    },
+                    {
+                      "Sid": "DenyHTTP",
+                      "Effect": "Deny",
+                      "Principal": "*",
+                      "Action": "sqs:*",
+                      "Resource": "arn:aws:sqs:REGION:ACCOUNT_ID:karpenter-interruption-queue",
+                      "Condition": {
+                        "Bool": {
+                          "aws:SecureTransport": "false"
+                        }
+                      }
+                    }
+                  ]
+                }
+              queueUrlRef:
+                name: karpenter-sqs-interruption-queue
+                namespace: upbound-system
+              region: region-placeholder
+        patches:
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.cluster_name
+            toFieldPath: spec.forProvider.queueUrlRef.name
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.queueUrlRef.namespace
+
+  - step: sqs-scheduled-changes-rules
+    functionRef:
+      name: crossplane-contrib-function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      resources:
+
+      - name: karpenter-sqs-rule-health 
+        base: 
+          apiVersion: cloudwatchevents.aws.m.upbound.io/v1beta1
+          kind: Rule
+          metadata:
+            annotations:
+              meta.upbound.io/example-id: cloudwatchevents/v1beta1/target
+            name: karpenter-health-event-rule
+            namespace: namespace-placeholder
+          spec:
+            forProvider:
+              eventBusNameSelector:
+                matchLabels:
+                  testing.upbound.io/example-name: target-bus
+              eventPattern: |
+                {
+                  "source": ["aws.health"],
+                  "detail-type": ["AWS Health Event"]
+                }
+              region: region-placeholder    
+        patches:
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region
+
+      - name: karpenter-sqs-rule-interruption-warning
+        base: 
+          apiVersion: cloudwatchevents.aws.m.upbound.io/v1beta1
+          kind: Rule
+          metadata:
+            annotations:
+              meta.upbound.io/example-id: cloudwatchevents/v1beta1/target
+            name: karpenter-interruption-warning-event-rule
+            namespace: namespace-placeholder
+          spec:
+            forProvider:
+              eventBusNameSelector:
+                matchLabels:
+                  testing.upbound.io/example-name: target-bus
+              eventPattern: |
+                {
+                  "source": ["aws.ec2"],
+                  "detail-type": ["EC2 Spot Instance Interruption Warning"]
+                }
+              region: region-placeholder    
+        patches:
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region
+
+      - name: karpenter-sqs-rule-rebalance-recommendation
+        base: 
+          apiVersion: cloudwatchevents.aws.m.upbound.io/v1beta1
+          kind: Rule
+          metadata:
+            annotations:
+              meta.upbound.io/example-id: cloudwatchevents/v1beta1/target
+            name: karpenter-rebalance-recommendation-event-rule
+            namespace: namespace-placeholder
+          spec:
+            forProvider:
+              eventBusNameSelector:
+                matchLabels:
+                  testing.upbound.io/example-name: target-bus
+              eventPattern: |
+                {
+                  "source": ["aws.ec2"],
+                  "detail-type": ["EC2 Instance Rebalance Recommendation"]
+                }
+            region: region-placeholder    
+        patches:
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region
+
+      - name:   instance-state-change
+        base: 
+          apiVersion: cloudwatchevents.aws.m.upbound.io/v1beta1
+          kind: Rule
+          metadata:
+            annotations:
+              meta.upbound.io/example-id: cloudwatchevents/v1beta1/target
+            name: karpenter-instance-state-change-event-rule
+            namespace: namespace-placeholder
+          spec:
+            forProvider:
+              eventBusNameSelector:
+                matchLabels:
+                  testing.upbound.io/example-name: target-bus
+              eventPattern: |
+                {
+                  "source": ["aws.ec2"],
+                  "detail-type": ["EC2 Instance State-change Notification"]
+                }
+              region: region-placeholder    
+        patches:
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region
+
+
+  - step: sqs-scheduled-changes-targets
+    functionRef:
+      name: crossplane-contrib-function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      resources:
+
+      - name: karpenter-sqs-health-rule-target
+        base: 
+          apiVersion: cloudwatchevents.aws.m.upbound.io/v1beta1
+          kind: Target
+          metadata:
+            annotations:
+              meta.upbound.io/example-id: cloudwatchevents/v1beta1/target
+            name: karpenter-health-event-target
+            namespace: namespace-placeholder
+          spec:
+            forProvider:
+              arn: arn:aws:sns:${data.aws_region}:${data.aws_account_id}:$CLUSTER_NAME #TODO: Replace with variables
+              region: region-placeholder
+              ruleRef:
+                name: karpenter-health-event-rule #TODO: is the crossplane element name or the AWS resource name?
+                namespace: namespace-placeholder
+        patches:
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.ruleRef.namespace
+
+      - name: karpenter-sqs-interruption-warning-rule-target
+        base: 
+          apiVersion: cloudwatchevents.aws.m.upbound.io/v1beta1
+          kind: Target
+          metadata:
+            annotations:
+              meta.upbound.io/example-id: cloudwatchevents/v1beta1/target
+            name: karpenter-interruption-warning-event-target
+            namespace: namespace-placeholder
+          spec:
+            forProvider:
+              arn: arn:aws:sns:${data.aws_region}:${data.aws_account_id}:$CLUSTER_NAME #TODO: Replace with variables
+              region: region-placeholder
+              ruleRef:
+                name: karpenter-interruption-warning-event-rule #TODO: is the crossplane element name or the AWS resource name?
+                namespace: namespace-placeholder
+        patches:
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.ruleRef.namespace
+
+      - name: karpenter-sqs-rebalance-recommendation-rule-target
+        base: 
+          apiVersion: cloudwatchevents.aws.m.upbound.io/v1beta1
+          kind: Target
+          metadata:
+            annotations:
+              meta.upbound.io/example-id: cloudwatchevents/v1beta1/target
+            name: karpenter-rebalance-recommendation-event-target
+            namespace: namespace-placeholder
+          spec:
+            forProvider:
+              arn: arn:aws:sns:${data.aws_region}:${data.aws_account_id}:$CLUSTER_NAME #TODO: Replace with variables
+              region: region-placeholder
+              ruleRef:
+                name: karpenter-rebalance-recommendation-event-rule #TODO: is the crossplane element name or the AWS resource name?
+                namespace: namespace-placeholder
+        patches:
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.ruleRef.namespace
+
+      - name: karpenter-sqs-instance-state-change-rule-target
+        base: 
+          apiVersion: cloudwatchevents.aws.m.upbound.io/v1beta1
+          kind: Target
+          metadata:
+            annotations:
+              meta.upbound.io/example-id: cloudwatchevents/v1beta1/target
+            name: karpenter-instance-state-change-event-target
+            namespace: namespace-placeholder
+          spec:
+            forProvider:
+              arn: arn:aws:sns:${data.aws_region}:${data.aws_account_id}:$CLUSTER_NAME #TODO: Replace with variables
+              region: region-placeholder
+              ruleRef:
+                name: karpenter-instance-state-change-event-rule #TODO: is the crossplane element name or the AWS resource name?
+                namespace: namespace-placeholder
+        patches:
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.ruleRef.namespace

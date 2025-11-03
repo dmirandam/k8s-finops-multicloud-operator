@@ -1,0 +1,52 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: awsinfras.aws.kfo.io
+spec:
+  scope: Namespaced
+  group: aws.kfo.io
+  names:
+    kind: awsinfra
+    plural: awsinfras
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+     openAPIV3Schema:
+       type: object
+       properties:
+        spec:
+          type: object
+          properties:
+            karpenter_namespace:
+              description: The namespace where Karpenter is deployed.
+              type: string
+            karpenter_version:
+              description: The version of Karpenter to deploy.
+              type: string
+            k8s_version:
+              description: The version of Kubernetes to use for the cluster.
+              type: string
+            cluster_name:
+              description: The name of the EKS cluster.
+              type: string
+            aws_partition:
+              description: The AWS partition where the cluster is deployed.
+              type: string
+            aws_region:
+              description: The AWS region where the cluster is deployed.
+              type: string
+            aws_account_id:
+              description: The AWS account ID where the cluster is deployed.
+              type: string
+            sqs_name:
+              description: The name of the SQS queue.
+              type: string
+              default: KarpenterInterruptionQueue   
+            alias_version:
+              description: The alias of the optimized AMI.
+              type: string
+            upbound_namespace:
+              description: The Upbound namespace where the provider is installed.
+              type: string

@@ -1,0 +1,13 @@
+apiVersion: apps.karmada.io/v1alpha1
+kind: PropagationPolicy
+metadata:
+  name: ns-prop
+  namespace: demo
+spec:
+  resourceSelectors:
+  - apiVersion: v1
+    kind: Namespace
+    name: demo
+  placement:
+    clusterAffinity:
+      clusterNames: ["microk8s-cluster","microk8s-cluster-2"]
