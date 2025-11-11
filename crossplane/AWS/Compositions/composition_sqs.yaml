@@ -22,122 +22,131 @@ spec:
           apiVersion: sqs.aws.m.upbound.io/v1beta1
           kind: Queue
           metadata:
-            name: name-placeholder
-            namespace: upbound-system
+            name: placeholder
+            namespace: placeholder
           spec:
             forProvider:
               messageRetentionSeconds: 300
-              name: upbound-sqs-with-policy
               sqsManagedSseEnabled: true
-              policy: | #TODO: Replace REGION and ACCOUNT_ID with variables
-                {
-                  "Id": "EC2InterruptionPolicy",
-                  "Version": "2012-10-17",
-                  "Statement": [
-                    {
-                      "Effect": "Allow",
-                      "Principal": {
-                        "Service": [
-                          "events.amazonaws.com",
-                          "sqs.amazonaws.com"
-                        ]
-                      },
-                      "Action": "sqs:SendMessage",
-                      "Resource": "arn:aws:sqs:REGION:ACCOUNT_ID:KarpenterInterruptionQueue"
-                    },
-                    {
-                      "Sid": "DenyHTTP",
-                      "Effect": "Deny",
-                      "Principal": "*",
-                      "Action": "sqs:*",
-                      "Resource": "arn:aws:sqs:REGION:ACCOUNT_ID:KarpenterInterruptionQueue",
-                      "Condition": {
-                        "Bool": {
-                          "aws:SecureTransport": "false"
-                        }
-                      }
-                    }
-                  ]
-                }
-              region: placeholder-region
+              region: placeholder
+
         patches:
           - type: FromCompositeFieldPath
             fromFieldPath: spec.cluster_name
             toFieldPath: metadata.name
+
           - type: FromCompositeFieldPath
             fromFieldPath: spec.upbound_namespace
             toFieldPath: metadata.namespace
+
           - type: FromCompositeFieldPath
             fromFieldPath: spec.aws_region
             toFieldPath: spec.forProvider.region
-
-
-  - step: sqs-policies-attachment
-    functionRef:
-      name: crossplane-contrib-function-patch-and-transform
-    input:
-      apiVersion: pt.fn.crossplane.io/v1beta1
-      kind: Resources
-      resources:
-     
-      - name: karpenter-sqs-interruption-queue
-        base:  
-          apiVersion: sqs.aws.m.upbound.io/v1beta1
-          kind: QueuePolicy
-          metadata:
-            annotations:
-              meta.upbound.io/example-id: sqs/v1beta1/queue-policy
-            name: KarpenterInterruptionQueuePolicy
-            namespace: namespace-placeholder
-          spec:
-            forProvider:
-              policy: | #TODO: Replace REGION and ACCOUNT_ID with variables
-                {
-                  "Id": "EC2InterruptionPolicy",
-                  "Version": "2012-10-17",
-                  "Statement": [
-                    {
-                      "Effect": "Allow",
-                      "Principal": {
-                        "Service": [
-                          "events.amazonaws.com",
-                          "sqs.amazonaws.com"
-                        ]
+            
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.aws_region        # %[1]s
+                - fromFieldPath: spec.aws_account_id    # %[2]s
+                - fromFieldPath: spec.cluster_name      # %[3]s
+              strategy: string
+              string:
+                fmt: |
+                  {
+                    "Id": "EC2InterruptionPolicy",
+                    "Version": "2012-10-17",
+                    "Statement": [
+                      {
+                        "Effect": "Allow",
+                        "Principal": {
+                          "Service": [
+                            "events.amazonaws.com",
+                            "sqs.amazonaws.com"
+                          ]
+                        },
+                        "Action": "sqs:SendMessage",
+                        "Resource": "arn:aws:sqs:%[1]s:%[2]s:%[3]s"
                       },
-                      "Action": "sqs:SendMessage",
-                      "Resource": "arn:aws:sqs:REGION:ACCOUNT_ID:karpenter-interruption-queue"
-                    },
-                    {
-                      "Sid": "DenyHTTP",
-                      "Effect": "Deny",
-                      "Principal": "*",
-                      "Action": "sqs:*",
-                      "Resource": "arn:aws:sqs:REGION:ACCOUNT_ID:karpenter-interruption-queue",
-                      "Condition": {
-                        "Bool": {
-                          "aws:SecureTransport": "false"
+                      {
+                        "Sid": "DenyHTTP",
+                        "Effect": "Deny",
+                        "Principal": "*",
+                        "Action": "sqs:*",
+                        "Resource": "arn:aws:sqs:%[1]s:%[2]s:%[3]s",
+                        "Condition": {
+                          "Bool": { "aws:SecureTransport": "false" }
                         }
                       }
-                    }
-                  ]
-                }
-              queueUrlRef:
-                name: karpenter-sqs-interruption-queue
-                namespace: upbound-system
-              region: region-placeholder
-        patches:
-          - type: FromCompositeFieldPath
-            fromFieldPath: spec.upbound_namespace
-            toFieldPath: metadata.namespace
-          - type: FromCompositeFieldPath
-            fromFieldPath: spec.aws_region
-            toFieldPath: spec.forProvider.region
-          - type: FromCompositeFieldPath
-            fromFieldPath: spec.cluster_name
-            toFieldPath: spec.forProvider.queueUrlRef.name
-          - type: FromCompositeFieldPath
-            fromFieldPath: spec.upbound_namespace
-            toFieldPath: spec.forProvider.queueUrlRef.namespace
+                    ]
+                  }
+            toFieldPath: spec.forProvider.policy
+
+  # - step: sqs-policies-attachment
+  #   functionRef:
+  #     name: crossplane-contrib-function-patch-and-transform
+  #   input:
+  #     apiVersion: pt.fn.crossplane.io/v1beta1
+  #     kind: Resources
+  #     resources:
+     
+  #     - name: karpenter-sqs-interruption-queue
+  #       base:  
+  #         apiVersion: sqs.aws.m.upbound.io/v1beta1
+  #         kind: QueuePolicy
+  #         metadata:
+  #           annotations:
+  #             meta.upbound.io/example-id: sqs/v1beta1/queue-policy
+  #           name: KarpenterInterruptionQueuePolicy
+  #           namespace: namespace-placeholder
+  #         spec:
+  #           forProvider:
+  #             policy: | #TODO: Replace REGION and ACCOUNT_ID with variables
+  #               {
+  #                 "Id": "EC2InterruptionPolicy",
+  #                 "Version": "2012-10-17",
+  #                 "Statement": [
+  #                   {
+  #                     "Effect": "Allow",
+  #                     "Principal": {
+  #                       "Service": [
+  #                         "events.amazonaws.com",
+  #                         "sqs.amazonaws.com"
+  #                       ]
+  #                     },
+  #                     "Action": "sqs:SendMessage",
+  #                     "Resource": "arn:aws:sqs:REGION:ACCOUNT_ID:karpenter-interruption-queue"
+  #                   },
+  #                   {
+  #                     "Sid": "DenyHTTP",
+  #                     "Effect": "Deny",
+  #                     "Principal": "*",
+  #                     "Action": "sqs:*",
+  #                     "Resource": "arn:aws:sqs:REGION:ACCOUNT_ID:karpenter-interruption-queue",
+  #                     "Condition": {
+  #                       "Bool": {
+  #                         "aws:SecureTransport": "false"
+  #                       }
+  #                     }
+  #                   }
+  #                 ]
+  #               }
+  #             queueUrlRef:
+  #               name: karpenter-sqs-interruption-queue
+  #               namespace: upbound-system
+  #             region: region-placeholder
+  #       patches:
+  #         - type: FromCompositeFieldPath
+  #           fromFieldPath: spec.upbound_namespace
+  #           toFieldPath: metadata.namespace
+  #         - type: FromCompositeFieldPath
+  #           fromFieldPath: spec.aws_region
+  #           toFieldPath: spec.forProvider.region
+  #         - type: FromCompositeFieldPath
+  #           fromFieldPath: spec.cluster_name
+  #           toFieldPath: spec.forProvider.queueUrlRef.name
+  #         - type: FromCompositeFieldPath
+  #           fromFieldPath: spec.upbound_namespace
+  #           toFieldPath: spec.forProvider.queueUrlRef.namespace
 
   - step: sqs-scheduled-changes-rules
     functionRef:
@@ -279,7 +288,7 @@ spec:
             namespace: namespace-placeholder
           spec:
             forProvider:
-              arn: arn:aws:sns:${data.aws_region}:${data.aws_account_id}:$CLUSTER_NAME #TODO: Replace with variables
+              arn: patched 
               region: region-placeholder
               ruleRef:
                 name: karpenter-health-event-rule #TODO: is the crossplane element name or the AWS resource name?
@@ -294,6 +303,16 @@ spec:
           - type: FromCompositeFieldPath
             fromFieldPath: spec.upbound_namespace
             toFieldPath: spec.forProvider.ruleRef.namespace
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.aws_region        # %[1]s
+                - fromFieldPath: spec.aws_account_id    # %[2]s
+                - fromFieldPath: spec.cluster_name      # %[3]s
+              strategy: string
+              string:
+                fmt: "arn:aws:sns:%[1]s:%[2]s:%[3]s"
+            toFieldPath: spec.forProvider.arn
 
       - name: karpenter-sqs-interruption-warning-rule-target
         base: 
@@ -306,7 +325,7 @@ spec:
             namespace: namespace-placeholder
           spec:
             forProvider:
-              arn: arn:aws:sns:${data.aws_region}:${data.aws_account_id}:$CLUSTER_NAME #TODO: Replace with variables
+              arn: patched
               region: region-placeholder
               ruleRef:
                 name: karpenter-interruption-warning-event-rule #TODO: is the crossplane element name or the AWS resource name?
@@ -321,6 +340,16 @@ spec:
           - type: FromCompositeFieldPath
             fromFieldPath: spec.upbound_namespace
             toFieldPath: spec.forProvider.ruleRef.namespace
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.aws_region        # %[1]s
+                - fromFieldPath: spec.aws_account_id    # %[2]s
+                - fromFieldPath: spec.cluster_name      # %[3]s
+              strategy: string
+              string:
+                fmt: "arn:aws:sns:%[1]s:%[2]s:%[3]s"
+            toFieldPath: spec.forProvider.arn            
 
       - name: karpenter-sqs-rebalance-recommendation-rule-target
         base: 
@@ -333,7 +362,7 @@ spec:
             namespace: namespace-placeholder
           spec:
             forProvider:
-              arn: arn:aws:sns:${data.aws_region}:${data.aws_account_id}:$CLUSTER_NAME #TODO: Replace with variables
+              arn: patched
               region: region-placeholder
               ruleRef:
                 name: karpenter-rebalance-recommendation-event-rule #TODO: is the crossplane element name or the AWS resource name?
@@ -348,6 +377,16 @@ spec:
           - type: FromCompositeFieldPath
             fromFieldPath: spec.upbound_namespace
             toFieldPath: spec.forProvider.ruleRef.namespace
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.aws_region        # %[1]s
+                - fromFieldPath: spec.aws_account_id    # %[2]s
+                - fromFieldPath: spec.cluster_name      # %[3]s
+              strategy: string
+              string:
+                fmt: "arn:aws:sns:%[1]s:%[2]s:%[3]s"
+            toFieldPath: spec.forProvider.arn
 
       - name: karpenter-sqs-instance-state-change-rule-target
         base: 
@@ -360,7 +399,7 @@ spec:
             namespace: namespace-placeholder
           spec:
             forProvider:
-              arn: arn:aws:sns:${data.aws_region}:${data.aws_account_id}:$CLUSTER_NAME #TODO: Replace with variables
+              arn: patched
               region: region-placeholder
               ruleRef:
                 name: karpenter-instance-state-change-event-rule #TODO: is the crossplane element name or the AWS resource name?
@@ -375,3 +414,13 @@ spec:
           - type: FromCompositeFieldPath
             fromFieldPath: spec.upbound_namespace
             toFieldPath: spec.forProvider.ruleRef.namespace
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.aws_region        # %[1]s
+                - fromFieldPath: spec.aws_account_id    # %[2]s
+                - fromFieldPath: spec.cluster_name      # %[3]s
+              strategy: string
+              string:
+                fmt: "arn:aws:sns:%[1]s:%[2]s:%[3]s"
+            toFieldPath: spec.forProvider.arn            
