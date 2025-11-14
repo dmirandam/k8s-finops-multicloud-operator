@@ -67,7 +67,7 @@ spec:
           metadata:
             annotations:
               meta.upbound.io/example-id: iam/v1beta1/role
-            name: karpenter-node-role-attachments
+            name: karpenter-node-role-attachments-node-policy
           spec:
             forProvider:
               policyArn: arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
@@ -85,7 +85,7 @@ spec:
               strategy: string
               string:
                 fmt: "karpenter-node-role-%s"
-            toFieldPath: spec.forProvider.roleRef.name  
+            toFieldPath: spec.forProvider.roleRef.name
           - type: FromCompositeFieldPath
             fromFieldPath: spec.upbound_namespace
             toFieldPath: metadata.namespace
@@ -93,50 +93,17 @@ spec:
             fromFieldPath: spec.upbound_namespace
             toFieldPath: spec.forProvider.roleRef.namespace
 
-      - name: karpenter-node-role-attachments-AmazonEKS_CNI_Policy
+      - name: karpenter-node-role-attachment-AmazonEKS_CNI_Policy
         base:
           apiVersion: iam.aws.m.upbound.io/v1beta1
           kind: RolePolicyAttachment
           metadata:
             annotations:
               meta.upbound.io/example-id: iam/v1beta1/role
-            name: karpenter-node-role-attachments
+            name: karpenter-node-role-attachments-cni-policy
           spec:
             forProvider:
               policyArn: arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
-              roleRef:
-                name: karpenter-node-role-placeholder
-                namespace: crossplane-system-placeholder
-            providerConfigRef:
-              kind: ClusterProviderConfig
-              name: default
-        patches:
-          - type: CombineFromComposite
-            combine:
-              variables:
-                - fromFieldPath: spec.cluster_name
-              strategy: string
-              string:
-                fmt: "karpenter-node-role-%s"
-            toFieldPath: spec.forProvider.roleRef.name  
-          - type: FromCompositeFieldPath
-            fromFieldPath: spec.upbound_namespace
-            toFieldPath: metadata.namespace
-          - type: FromCompositeFieldPath
-            fromFieldPath: spec.upbound_namespace
-            toFieldPath: spec.forProvider.roleRef.namespace
-
-      - name: karpenter-node-role-attachment-AmazonSSMManagedInstanceCore
-        base:
-          apiVersion: iam.aws.m.upbound.io/v1beta1
-          kind: RolePolicyAttachment
-          metadata:
-            annotations:
-              meta.upbound.io/example-id: iam/v1beta1/role
-            name: karpenter-node-role-attachments
-          spec:
-            forProvider:
-              policyArn: arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly
               roleRef:
                 name: karpenter-node-role-placeholder
                 namespace: crossplane-system-placeholder
@@ -166,7 +133,40 @@ spec:
           metadata:
             annotations:
               meta.upbound.io/example-id: iam/v1beta1/role
-            name: karpenter-node-role-attachments
+            name: karpenter-node-role-attachments-registry-pull
+          spec:
+            forProvider:
+              policyArn: arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly
+              roleRef:
+                name: karpenter-node-role-placeholder
+                namespace: crossplane-system-placeholder
+            providerConfigRef:
+              kind: ClusterProviderConfig
+              name: default
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "karpenter-node-role-%s"
+            toFieldPath: spec.forProvider.roleRef.name  
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.roleRef.namespace
+
+      - name: karpenter-node-role-attachment-AmazonSSMManagedInstanceCore
+        base:
+          apiVersion: iam.aws.m.upbound.io/v1beta1
+          kind: RolePolicyAttachment
+          metadata:
+            annotations:
+              meta.upbound.io/example-id: iam/v1beta1/role
+            name: karpenter-node-role-attachments-instance-core
           spec:
             forProvider:
               policyArn: arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
@@ -192,7 +192,7 @@ spec:
             fromFieldPath: spec.upbound_namespace
             toFieldPath: spec.forProvider.roleRef.namespace
 
-      - name: karpenter-controller-role
+      - name: karpenter-controller-role #TODO: Set the assumeRolePolicy according to the Karpenter documentation. Find a way to get de OIDC value before or a way to not use it
         base:
           apiVersion: iam.aws.m.upbound.io/v1beta1
           kind: Role
@@ -201,10 +201,25 @@ spec:
             namespace: upbound-system-placeholder
           spec:
             forProvider:
+              assumeRolePolicy: |
+                {
+                  "Version": "2012-10-17",
+                  "Statement": [
+                    {
+                      "Effect": "Allow",
+                      "Principal": {
+                        "Service": "pods.eks.amazonaws.com"
+                      },
+                      "Action": [
+                        "sts:AssumeRole",
+                        "sts:TagSession"
+                      ]
+                    }
+                  ]
+                }
               inlinePolicy:
                 - name: karpenter-controller-policy
-                  policy: | 
-                    patched
+                  policy: "placeholder"
 
         patches:
           - type: CombineFromComposite

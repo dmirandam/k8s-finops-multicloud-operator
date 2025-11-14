@@ -231,7 +231,7 @@ spec:
                   "source": ["aws.ec2"],
                   "detail-type": ["EC2 Instance Rebalance Recommendation"]
                 }
-            region: region-placeholder    
+              region: region-placeholder    
         patches:
           - type: FromCompositeFieldPath
             fromFieldPath: spec.upbound_namespace
