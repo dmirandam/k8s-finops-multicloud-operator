@@ -1,0 +1,690 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: awsinfra-vpc
+  labels:
+    aws.kfo.io/xrd: awsinfras.aws.kfo.io
+spec:
+  compositeTypeRef:
+    apiVersion: aws.kfo.io/v1alpha1
+    kind: awsinfra
+
+  # Crossplane v2 – usamos Functions (Pipeline)
+  mode: Pipeline
+  pipeline:
+  - step: patch-and-transform
+    functionRef:
+      name: crossplane-contrib-function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      patchSets:
+        - name: common-aws-fields
+          patches:
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.aws_region
+              toFieldPath: spec.forProvider.region
+
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.cluster_name
+              toFieldPath: metadata.labels[aws.kfo.io/cluster-name]
+
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.upbound_namespace
+              toFieldPath: metadata.namespace
+
+      # ---- Recursos que componen la VPC ----
+      resources:
+        # VPC principal 192.168.0.0/16
+        - name: vpc
+          base:
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: VPC
+            metadata:
+              name: vpc
+              namespace: placeholder-namespace
+            spec:
+              
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default     
+              forProvider:
+                cidrBlock: 192.168.0.0/16
+                enableDnsSupport: true
+                enableDnsHostnames: true
+                tags:
+                  Name: eksctl-like-vpc
+          patches:
+            - type: PatchSet
+              patchSetName: common-aws-fields
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "vpc-%s"
+              toFieldPath: metadata.name        
+        # Elastic IP para el NAT Gateway
+        - name: eip-nat
+          base:
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: EIP
+            metadata:
+              name: eip-nat
+              namespace: placeholder-namespace
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default     
+              forProvider:
+                domain: vpc
+                tags:
+                  Name: nat-eip
+          patches:
+            - type: PatchSet
+              patchSetName: common-aws-fields
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "eip-nat-%s"
+              toFieldPath: metadata.name              
+
+        # Internet Gateway asociado a la VPC
+        - name: igw
+          base:
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: InternetGateway
+            metadata:
+              name: igw
+              namespace: placeholder-namespace
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default                
+              forProvider:
+                vpcIdSelector:
+                  matchControllerRef: true
+                tags:
+                  Name: eksctl-like-igw
+          patches:
+            - type: PatchSet
+              patchSetName: common-aws-fields
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "igw-%s"
+              toFieldPath: metadata.name
+
+        # Subnet pública us-east-1c
+        - name: subnet-public-use1c
+          base:
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: Subnet
+            metadata:
+              name: subnet-public-use1c
+              namespace: placeholder-namespace
+              labels:
+                aws.kfo.io/subnet-type: public
+                aws.kfo.io/az: us-east-1c
+            spec:
+              
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default     
+              forProvider:
+                availabilityZone: us-east-1c
+                cidrBlock: 192.168.0.0/19
+                mapPublicIpOnLaunch: true
+                vpcIdSelector:
+                  matchControllerRef: true
+                tags:
+                  Name: public-us-east-1c
+                  kubernetes.io/role/elb: "1"
+          patches:
+            - type: PatchSet
+              patchSetName: common-aws-fields
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "subnet-public-use1c-%s"
+              toFieldPath: metadata.name
+
+        # Subnet privada us-east-1c
+        - name: subnet-private-use1c
+          base:
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: Subnet
+            metadata:
+              name: subnet-private-use1c
+              namespace: placeholder-namespace
+              labels:
+                aws.kfo.io/subnet-type: private
+                aws.kfo.io/az: us-east-1c
+            spec:
+              
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default     
+              forProvider:
+                availabilityZone: us-east-1c
+                cidrBlock: 192.168.32.0/19
+                vpcIdSelector:
+                  matchControllerRef: true
+                tags:
+                  Name: private-us-east-1c
+                  kubernetes.io/role/internal-elb: "1"
+          patches:
+            - type: PatchSet
+              patchSetName: common-aws-fields
+            - type: CombineFromComposite
+              combine:
+                variables:    
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "subnet-private-use1c-%s"
+              toFieldPath: metadata.name
+
+        # Subnet pública us-east-1d
+        - name: subnet-public-use1d
+          base:
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: Subnet
+            metadata:
+              name: subnet-public-use1d
+              namespace: placeholder-namespace
+              labels:
+                aws.kfo.io/subnet-type: public
+                aws.kfo.io/az: us-east-1d
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default     
+              forProvider:
+                availabilityZone: us-east-1d
+                cidrBlock: 192.168.64.0/19
+                mapPublicIpOnLaunch: true
+                vpcIdSelector:
+                  matchControllerRef: true
+                tags:
+                  Name: public-us-east-1d
+                  kubernetes.io/role/elb: "1"
+          patches:
+            - type: PatchSet
+              patchSetName: common-aws-fields
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "subnet-public-use1d-%s"
+              toFieldPath: metadata.name
+
+        # Subnet privada us-east-1d
+        - name: subnet-private-use1d
+          base:
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: Subnet
+            metadata:
+              name: subnet-private-use1d
+              namespace: placeholder-namespace
+              labels:
+                aws.kfo.io/subnet-type: private
+                aws.kfo.io/az: us-east-1d
+            spec:
+              
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default     
+              forProvider:
+                availabilityZone: us-east-1d
+                cidrBlock: 192.168.96.0/19
+                vpcIdSelector:
+                  matchControllerRef: true
+                tags:
+                  Name: private-us-east-1d
+                  kubernetes.io/role/internal-elb: "1"
+          patches:
+            - type: PatchSet
+              patchSetName: common-aws-fields
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "subnet-private-use1d-%s"
+              toFieldPath: metadata.name
+
+        # NAT Gateway (usa la subnet pública de us-east-1c)
+        - name: nat-gateway
+          base:
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: NATGateway
+            metadata:
+              name: nat-gateway
+              namespace: placeholder-namespace            
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default     
+              forProvider:
+                connectivityType: public
+                allocationIdRef:
+                  name: eip-nat
+                  namespace: placeholder-namespace
+                subnetIdSelector:
+                  matchLabels:
+                    aws.kfo.io/subnet-type: public
+                    aws.kfo.io/az: us-east-1c
+                tags:
+                  Name: eksctl-like-nat
+          patches:
+            - type: PatchSet
+              patchSetName: common-aws-fields
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "nat-gateway-%s"
+              toFieldPath: metadata.name         
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.upbound_namespace
+              toFieldPath: spec.forProvider.allocationIdRef.namespace
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "eip-nat-%s"
+              toFieldPath: spec.forProvider.allocationIdRef.name
+
+        # Route table pública
+        - name: rt-public
+          base:
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: RouteTable
+            metadata:
+              name: rt-public
+              namespace: placeholder-namespace
+            spec:
+              
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default     
+              forProvider:
+                vpcIdSelector:
+                  matchControllerRef: true
+                tags:
+                  Name: public-rt
+          patches:
+            - type: PatchSet
+              patchSetName: common-aws-fields
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "rt-public-%s"
+              toFieldPath: metadata.name
+
+        # Ruta por defecto en la pública → IGW
+        - name: rt-public-default-route
+          base:
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: Route
+            metadata:
+              name: rt-public-default-route
+              namespace: placeholder-namespace
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default     
+              forProvider:
+                destinationCidrBlock: 0.0.0.0/0
+                routeTableIdRef:
+                  name: rt-public-placeholder
+                  namespace: placeholder-namespace
+                gatewayIdRef:
+                  name: igw
+                  namespace: placeholder-namespace
+          patches:
+            - type: PatchSet
+              patchSetName: common-aws-fields
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "rt-public-default-route-%s"
+              toFieldPath: metadata.name
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.upbound_namespace
+              toFieldPath: spec.forProvider.routeTableIdRef.namespace
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "rt-public-%s"
+              toFieldPath: spec.forProvider.routeTableIdRef.name
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.upbound_namespace
+              toFieldPath: spec.forProvider.gatewayIdRef.namespace
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "igw-%s"
+              toFieldPath: spec.forProvider.gatewayIdRef.name
+
+        # Route table privada (compartida por ambas privadas)
+        - name: rt-private
+          base:
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: RouteTable
+            metadata:
+              name: rt-private
+              namespace: placeholder-namespace
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default     
+              forProvider:
+                vpcIdSelector:
+                  matchControllerRef: true
+          patches:
+            - type: PatchSet
+              patchSetName: common-aws-fields
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "rt-private-%s"
+              toFieldPath: metadata.name
+
+        # Ruta por defecto en la privada → NAT
+        - name: rt-private-default-route
+          base:
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: Route
+            metadata:
+              name: rt-private-default-route
+              namespace: placeholder-namespace
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default     
+              forProvider:
+                destinationCidrBlock: 0.0.0.0/0
+                routeTableIdRef:
+                  name: rt-private-placeholder
+                  namespace: placeholder-namespace
+                natGatewayIdRef:
+                  name: nat-gateway
+                  namespace: placeholder-namespace
+          patches:
+            - type: PatchSet
+              patchSetName: common-aws-fields
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "rt-private-default-route-%s"
+              toFieldPath: metadata.name
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.upbound_namespace
+              toFieldPath: spec.forProvider.routeTableIdRef.namespace
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "rt-private-%s"
+              toFieldPath: spec.forProvider.routeTableIdRef.name
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.upbound_namespace
+              toFieldPath: spec.forProvider.natGatewayIdRef.namespace
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "nat-gateway-%s"
+              toFieldPath: spec.forProvider.natGatewayIdRef.name
+
+        # Associations: subnets públicas → rt-public
+        - name: rta-public-use1c
+          base:
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: RouteTableAssociation
+            metadata:
+              name: rta-public-use1c
+              namespace: placeholder-namespace
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default     
+              forProvider:
+                routeTableIdRef:
+                  name: rt-public-placeholder
+                  namespace: placeholder-namespace
+                subnetIdRef:
+                  name: subnet-public-use1c
+                  namespace: placeholder-namespace
+          patches:
+            - type: PatchSet
+              patchSetName: common-aws-fields
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "rta-public-use1c-%s"
+              toFieldPath: metadata.name 
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.upbound_namespace
+              toFieldPath: spec.forProvider.routeTableIdRef.namespace
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "rt-public-%s"
+              toFieldPath: spec.forProvider.routeTableIdRef.name          
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.upbound_namespace
+              toFieldPath: spec.forProvider.subnetIdRef.namespace
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "subnet-public-use1c-%s"
+              toFieldPath: spec.forProvider.subnetIdRef.name   
+
+        - name: rta-public-use1d
+          base:
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: RouteTableAssociation
+            metadata:
+              name: rta-public-use1d
+              namespace: placeholder-namespace
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default     
+              forProvider:
+                routeTableIdRef:
+                  name: rt-public-placeholder
+                  namespace: placeholder-namespace
+                subnetIdRef:
+                  name: subnet-public-use1d
+                  namespace: placeholder-namespace
+          patches:
+            - type: PatchSet
+              patchSetName: common-aws-fields
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "rta-public-use1d-%s"
+              toFieldPath: metadata.name
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.upbound_namespace
+              toFieldPath: spec.forProvider.routeTableIdRef.namespace
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "rt-public-%s"
+              toFieldPath: spec.forProvider.routeTableIdRef.name          
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.upbound_namespace
+              toFieldPath: spec.forProvider.subnetIdRef.namespace
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "subnet-public-use1d-%s"
+              toFieldPath: spec.forProvider.subnetIdRef.name   
+
+        - name: rta-private-use1c
+          base:
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: RouteTableAssociation
+            metadata:
+              name: rta-private-use1c
+              namespace: placeholder-namespace
+            spec:
+              
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default     
+              forProvider:
+                routeTableIdRef:
+                  name: rt-private-placeholder
+                  namespace: placeholder-namespace
+                subnetIdRef:
+                  name: subnet-private-use1c
+                  namespace: placeholder-namespace
+          patches:
+            - type: PatchSet
+              patchSetName: common-aws-fields
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "rta-private-use1c-%s"
+              toFieldPath: metadata.name
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.upbound_namespace
+              toFieldPath: spec.forProvider.routeTableIdRef.namespace
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "rt-private-%s"
+              toFieldPath: spec.forProvider.routeTableIdRef.name          
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.upbound_namespace
+              toFieldPath: spec.forProvider.subnetIdRef.namespace
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "subnet-private-use1c-%s"
+              toFieldPath: spec.forProvider.subnetIdRef.name   
+
+        - name: rta-private-use1d
+          base:
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: RouteTableAssociation
+            metadata:
+              name: rta-private-use1d
+              namespace: placeholder-namespace
+            spec:
+              
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default     
+              forProvider:
+                routeTableIdRef:
+                  name: rt-private-placeholder
+                  namespace: placeholder-namespace
+                subnetIdRef:
+                  name: subnet-private-use1d
+                  namespace: placeholder-namespace
+          patches:
+            - type: PatchSet
+              patchSetName: common-aws-fields
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "rta-private-use1d-%s"
+              toFieldPath: metadata.name
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.upbound_namespace
+              toFieldPath: spec.forProvider.routeTableIdRef.namespace
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "rt-private-%s"
+              toFieldPath: spec.forProvider.routeTableIdRef.name          
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.upbound_namespace
+              toFieldPath: spec.forProvider.subnetIdRef.namespace
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "subnet-private-use1d-%s"
+              toFieldPath: spec.forProvider.subnetIdRef.name   

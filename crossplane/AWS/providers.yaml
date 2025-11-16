@@ -3,7 +3,7 @@ kind: Provider
 metadata:
   name: upbound-provider-aws-sqs
 spec:
-  package: xpkg.upbound.io/upbound/provider-aws-sqs:v2
+  package: xpkg.upbound.io/upbound/provider-aws-sqs:v2.2.0
 
 ---
 
@@ -12,7 +12,7 @@ kind: Provider
 metadata:
   name: upbound-provider-aws-cloudwatchevents
 spec:
-  package: xpkg.upbound.io/upbound/provider-aws-cloudwatchevents:v2
+  package: xpkg.upbound.io/upbound/provider-aws-cloudwatchevents:v2.2.0
 
 ---
 
@@ -21,6 +21,22 @@ kind: Provider
 metadata:
   name: upbound-provider-aws-iam
 spec:
-  package: xpkg.upbound.io/upbound/provider-aws-iam:v2
+  package: xpkg.upbound.io/upbound/provider-aws-iam:v2.2.0
 
 ---
+
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: upbound-provider-aws-eks
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-eks:v2.2.0
+
+---
+
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: upbound-provider-aws-ec2
+spec:
+  package: xpkg.upbound.io/upbound/provider-aws-ec2:v2.2.0

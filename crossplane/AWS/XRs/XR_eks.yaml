@@ -13,3 +13,4 @@ spec:
   aws_account_id: "089372642158"
   sqs_name: "eks-dsmm"
   upbound_namespace: crossplane-system
+  karpenter_namespace: karpenter-system

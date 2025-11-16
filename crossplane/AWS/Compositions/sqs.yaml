@@ -161,15 +161,11 @@ spec:
           apiVersion: cloudwatchevents.aws.m.upbound.io/v1beta1
           kind: Rule
           metadata:
-            annotations:
-              meta.upbound.io/example-id: cloudwatchevents/v1beta1/target
             name: karpenter-health-event-rule
             namespace: namespace-placeholder
           spec:
             forProvider:
-              eventBusNameSelector:
-                matchLabels:
-                  testing.upbound.io/example-name: target-bus
+              eventBusName: default
               eventPattern: |
                 {
                   "source": ["aws.health"],
@@ -189,15 +185,11 @@ spec:
           apiVersion: cloudwatchevents.aws.m.upbound.io/v1beta1
           kind: Rule
           metadata:
-            annotations:
-              meta.upbound.io/example-id: cloudwatchevents/v1beta1/target
             name: karpenter-interruption-warning-event-rule
             namespace: namespace-placeholder
           spec:
             forProvider:
-              eventBusNameSelector:
-                matchLabels:
-                  testing.upbound.io/example-name: target-bus
+              eventBusName: default
               eventPattern: |
                 {
                   "source": ["aws.ec2"],
@@ -217,15 +209,11 @@ spec:
           apiVersion: cloudwatchevents.aws.m.upbound.io/v1beta1
           kind: Rule
           metadata:
-            annotations:
-              meta.upbound.io/example-id: cloudwatchevents/v1beta1/target
             name: karpenter-rebalance-recommendation-event-rule
             namespace: namespace-placeholder
           spec:
             forProvider:
-              eventBusNameSelector:
-                matchLabels:
-                  testing.upbound.io/example-name: target-bus
+              eventBusName: default
               eventPattern: |
                 {
                   "source": ["aws.ec2"],
@@ -245,15 +233,11 @@ spec:
           apiVersion: cloudwatchevents.aws.m.upbound.io/v1beta1
           kind: Rule
           metadata:
-            annotations:
-              meta.upbound.io/example-id: cloudwatchevents/v1beta1/target
             name: karpenter-instance-state-change-event-rule
             namespace: namespace-placeholder
           spec:
             forProvider:
-              eventBusNameSelector:
-                matchLabels:
-                  testing.upbound.io/example-name: target-bus
+              eventBusName: default
               eventPattern: |
                 {
                   "source": ["aws.ec2"],
@@ -282,14 +266,14 @@ spec:
           apiVersion: cloudwatchevents.aws.m.upbound.io/v1beta1
           kind: Target
           metadata:
-            annotations:
-              meta.upbound.io/example-id: cloudwatchevents/v1beta1/target
             name: karpenter-health-event-target
             namespace: namespace-placeholder
           spec:
             forProvider:
+              eventBusName: default
               arn: patched 
               region: region-placeholder
+              targetId: karpenter-health-event-target
               ruleRef:
                 name: karpenter-health-event-rule #TODO: is the crossplane element name or the AWS resource name?
                 namespace: namespace-placeholder
@@ -319,14 +303,14 @@ spec:
           apiVersion: cloudwatchevents.aws.m.upbound.io/v1beta1
           kind: Target
           metadata:
-            annotations:
-              meta.upbound.io/example-id: cloudwatchevents/v1beta1/target
             name: karpenter-interruption-warning-event-target
             namespace: namespace-placeholder
           spec:
             forProvider:
+              eventBusName: default
               arn: patched
               region: region-placeholder
+              targetId: karpenter-interruption-warning-event-target
               ruleRef:
                 name: karpenter-interruption-warning-event-rule #TODO: is the crossplane element name or the AWS resource name?
                 namespace: namespace-placeholder
@@ -356,14 +340,14 @@ spec:
           apiVersion: cloudwatchevents.aws.m.upbound.io/v1beta1
           kind: Target
           metadata:
-            annotations:
-              meta.upbound.io/example-id: cloudwatchevents/v1beta1/target
             name: karpenter-rebalance-recommendation-event-target
             namespace: namespace-placeholder
           spec:
             forProvider:
+              eventBusName: default
               arn: patched
               region: region-placeholder
+              targetId: karpenter-rebalance-recommendation-event-target
               ruleRef:
                 name: karpenter-rebalance-recommendation-event-rule #TODO: is the crossplane element name or the AWS resource name?
                 namespace: namespace-placeholder
@@ -393,14 +377,14 @@ spec:
           apiVersion: cloudwatchevents.aws.m.upbound.io/v1beta1
           kind: Target
           metadata:
-            annotations:
-              meta.upbound.io/example-id: cloudwatchevents/v1beta1/target
             name: karpenter-instance-state-change-event-target
             namespace: namespace-placeholder
           spec:
             forProvider:
+              eventBusName: default
               arn: patched
               region: region-placeholder
+              targetId: karpenter-instance-state-change-event-target
               ruleRef:
                 name: karpenter-instance-state-change-event-rule #TODO: is the crossplane element name or the AWS resource name?
                 namespace: namespace-placeholder

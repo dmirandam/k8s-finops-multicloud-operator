@@ -55,7 +55,7 @@ spec:
             namespace: upbound-namespace-placeholder
           spec:
             forProvider:
-              instanceTypes: m5.large
+              instanceTypes: [m5.large]
               clusterNameRef:
                 name: eks-cluster-name-placeholder 
               nodeRoleArnRef:
@@ -85,10 +85,10 @@ spec:
               strategy: string
               string:
                 fmt: "karpenter-node-role-%s"
-            toFieldPath: spec.forProvider.roleArnRef.name
+            toFieldPath: spec.forProvider.nodeRoleArnRef.name
           - type: FromCompositeFieldPath
             fromFieldPath: spec.aws_region
-            toFieldPath: spec.forProvider.region    
+            toFieldPath: spec.forProvider.region
 
       - name: addon
         base:        
@@ -101,6 +101,7 @@ spec:
             forProvider:
               addonName: eks-pod-identity-agent
               clusterName: cluster-name-placeholder
+              region: region-placeholder
         patches:
           - type: CombineFromComposite
             combine:
@@ -115,6 +116,9 @@ spec:
           - type: FromCompositeFieldPath
             fromFieldPath: spec.cluster_name
             toFieldPath: spec.forProvider.clusterName
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region
 
       - name: pod-identity
         base:

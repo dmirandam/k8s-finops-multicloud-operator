@@ -1,0 +1,12 @@
+apiVersion: aws.kfo.io/v1alpha1
+kind: awsinfra
+metadata:
+  name: vpc-dsmm
+  namespace: crossplane-system
+spec:
+  crossplane:
+    compositionRef:
+      name: awsinfra-vpc
+  cluster_name: eks-dsmm
+  aws_region: us-east-1
+  upbound_namespace: crossplane-system
