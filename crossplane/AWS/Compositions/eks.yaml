@@ -8,7 +8,6 @@ spec:
     kind: awsinfra
   mode: Pipeline
   pipeline:
-
   - step: cluster-creation
     functionRef:
       name: crossplane-contrib-function-patch-and-transform
@@ -16,7 +15,7 @@ spec:
       apiVersion: pt.fn.crossplane.io/v1beta1
       kind: Resources
       resources:
-     
+
       - name: eks-cluster
         base:
           apiVersion: eks.aws.m.upbound.io/v1beta1
@@ -28,8 +27,16 @@ spec:
             forProvider:
               region: aws-region-placeholder
               version: eks-version-placeholder
+              roleArnRef:
+                name: eks-cluster-role-placeholder
+                namespace: upbound-namespace-placeholder
               tags:
                 karpenter.sh/discovery: eks-cluster-name-placeholder
+              vpcConfig:
+                subnetIdSelector:
+                  matchLabels:
+                    aws.kfo.io/subnet-type: private
+                    aws.kfo.io/cluster-name: cluster-name-placeholder
         patches:
           - type: FromCompositeFieldPath
             fromFieldPath: spec.cluster_name
@@ -43,10 +50,24 @@ spec:
             toFieldPath: spec.forProvider.version
           - type: FromCompositeFieldPath
             fromFieldPath: spec.cluster_name
-            toFieldPath: spec.forProvider.tags["karpenter.sh/discovery"]
+            toFieldPath: spec.forProvider.tags[karpenter.sh/discovery]
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.cluster_name
+            toFieldPath: spec.forProvider.vpcConfig.subnetIdSelector.matchLabels[aws.kfo.io/cluster-name]       
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "eks-cluster-role-%s"
+            toFieldPath: spec.forProvider.roleArnRef.name
 
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.roleArnRef.namespace                 
 
-      - name: node-group
+      - name: node-group #FIXME: failed to create the resource: [{0 creating EKS Node Group (eks-dsmm:eks-dsmm-ng): operation error EKS: CreateNodegroup, https response error StatusCode: 400, RequestID: 1d629ff8-a8cf-4a4d-bf5a-1f6c8fb0fb37, InvalidParameterException: Subnets are required  []}]
         base:
           apiVersion: eks.aws.m.upbound.io/v1beta1
           kind: NodeGroup
@@ -174,7 +195,7 @@ spec:
                 fmt: "%s-karpenter-controller-role"
             toFieldPath: spec.forProvider.roleArnRef.name
       
-      - name: access-entry
+      - name: access-entry #FIXME: async create failed: failed to create the resource: [{0 creating EKS Access Entry (eks-dsmm:arn:aws:iam::089372642158:role/karpenter-node-role-eks-dsmm): operation error EKS: CreateAccessEntry, https response error StatusCode: 400, RequestID: 3af6d0f0-af6d-41e7-8c1f-428a904cc236, InvalidParameterException: The kubernetes group name system:nodes is invalid, it cannot start with system:  []}]  
         base:
           apiVersion: eks.aws.m.upbound.io/v1beta1
           kind: AccessEntry

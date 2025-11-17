@@ -1,3 +1,5 @@
+#TODO: Implement a patchset
+
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
@@ -524,3 +526,213 @@ spec:
                     ]
                   }
             toFieldPath: spec.forProvider.inlinePolicy[0].policy
+
+  - step: eks-cluster-role
+    functionRef:
+      name: crossplane-contrib-function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      resources:
+      - name: eks-cluster-role
+        base:
+          apiVersion: iam.aws.m.upbound.io/v1beta1
+          kind: Role
+          metadata:
+            name: eks-cluster-role-placeholder
+            namespace: upbound-placeholder
+          spec:
+            forProvider:
+              assumeRolePolicy: |
+                {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "eks.amazonaws.com"
+                            },
+                            "Action": [
+                                "sts:AssumeRole",
+                                "sts:TagSession"
+                            ]
+                        }
+                    ]
+                }
+
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "eks-cluster-role-%s"
+            toFieldPath: metadata.name
+
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+
+  - step: eks-cluster-role-policy-attachments
+    functionRef:
+      name: crossplane-contrib-function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      resources:
+
+      - name: eks-cluster-role-attachment-cluster
+        base:
+          apiVersion: iam.aws.m.upbound.io/v1beta1
+          kind: RolePolicyAttachment
+          metadata:
+            name: eks-cluster-role-attach-cluster-placeholder
+            namespace: upbound-placeholder
+          spec:
+            forProvider:
+              policyArn: arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+              roleRef:
+                name: eks-cluster-role-placeholder
+                namespace: upbound-placeholder
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "eks-cluster-role-%s"
+            toFieldPath: spec.forProvider.roleRef.name
+
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.roleRef.namespace
+
+      - name: eks-cluster-role-attachment-compute
+        base:
+          apiVersion: iam.aws.m.upbound.io/v1beta1
+          kind: RolePolicyAttachment
+          metadata:
+            name: eks-cluster-role-attach-compute-placeholder
+            namespace: upbound-placeholder
+          spec:
+            forProvider:
+              policyArn: arn:aws:iam::aws:policy/AmazonEKSComputePolicy
+              roleRef:
+                name: eks-cluster-role-placeholder
+                namespace: upbound-placeholder
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "eks-cluster-role-%s"
+            toFieldPath: spec.forProvider.roleRef.name
+
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.roleRef.namespace
+
+      - name: eks-cluster-role-attachment-networking
+        base:
+          apiVersion: iam.aws.m.upbound.io/v1beta1
+          kind: RolePolicyAttachment
+          metadata:
+            name: eks-cluster-role-attach-networking-placeholder
+            namespace: upbound-placeholder
+          spec:
+            forProvider:
+              policyArn: arn:aws:iam::aws:policy/AmazonEKSNetworkingPolicy
+              roleRef:
+                name: eks-cluster-role-placeholder
+                namespace: upbound-placeholder
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "eks-cluster-role-%s"
+            toFieldPath: spec.forProvider.roleRef.name
+
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.roleRef.namespace
+
+      - name: eks-cluster-role-attachment-blockstorage
+        base:
+          apiVersion: iam.aws.m.upbound.io/v1beta1
+          kind: RolePolicyAttachment
+          metadata:
+            name: eks-cluster-role-attach-blockstorage-placeholder
+            namespace: upbound-placeholder
+          spec:
+            forProvider:
+              policyArn: arn:aws:iam::aws:policy/AmazonEKSBlockStoragePolicy
+              roleRef:
+                name: eks-cluster-role-placeholder
+                namespace: upbound-placeholder
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "eks-cluster-role-%s"
+            toFieldPath: spec.forProvider.roleRef.name
+
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.roleRef.namespace
+
+      - name: eks-cluster-role-attachment-lb
+        base:
+          apiVersion: iam.aws.m.upbound.io/v1beta1
+          kind: RolePolicyAttachment
+          metadata:
+            name: eks-cluster-role-attach-lb-placeholder
+            namespace: upbound-placeholder
+          spec:
+            forProvider:
+              policyArn: arn:aws:iam::aws:policy/AmazonEKSLoadBalancingPolicy
+              roleRef:
+                name: eks-cluster-role-placeholder
+                namespace: upbound-placeholder
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "eks-cluster-role-%s"
+            toFieldPath: spec.forProvider.roleRef.name
+
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.roleRef.namespace
