@@ -231,6 +231,7 @@ spec:
       
 
       - name: karpenter-controller-role #TODO: Move to a diferent composition?
+        base:
           apiVersion: iam.aws.m.upbound.io/v1beta1
           kind: Role
           metadata:
