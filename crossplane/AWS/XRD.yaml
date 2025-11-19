@@ -50,3 +50,6 @@ spec:
             upbound_namespace:
               description: The Upbound namespace where the provider is installed.
               type: string
+            eks_oidc_issuer:
+              description: The OIDC issuer URL for the EKS cluster.
+              type: string

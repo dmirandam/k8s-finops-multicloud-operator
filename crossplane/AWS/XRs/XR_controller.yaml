@@ -1,0 +1,362 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: awsinfra-controller
+spec:
+  compositeTypeRef:
+    apiVersion: aws.kfo.io/v1alpha1
+    kind: awsinfra
+  mode: Pipeline
+  pipeline:
+  - step: role-creation
+    functionRef:
+      name: crossplane-contrib-function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      resources:      
+      - name: karpenter-controller-role
+        base:
+          apiVersion: iam.aws.m.upbound.io/v1beta1
+          kind: Role
+          metadata:
+            name: karpenter-controller-role-placeholder
+            namespace: upbound-system-placeholder
+          spec:
+            forProvider:
+              assumeRolePolicy: "placeholder"
+              inlinePolicy:
+                - name: karpenter-controller-policy
+                  policy: "placeholder"
+
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "%s-karpenter-controller-role"
+            toFieldPath: metadata.name
+          
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "karpenter-controller-policy-%s"
+            toFieldPath: spec.forProvider.inlinePolicy[0].name
+
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.aws_partition  # %[1]s
+                - fromFieldPath: spec.aws_region     # %[2]s
+                - fromFieldPath: spec.aws_account_id # %[3]s
+                - fromFieldPath: spec.cluster_name   # %[4]s
+                - fromFieldPath: spec.sqs_name       # %[5]s
+              strategy: string
+              string:
+                fmt: |
+                  {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                      {
+                        "Sid": "AllowScopedEC2InstanceAccessActions",
+                        "Effect": "Allow",
+                        "Resource": [
+                          "arn:%[1]s:ec2:%[2]s::image/*",
+                          "arn:%[1]s:ec2:%[2]s::snapshot/*",
+                          "arn:%[1]s:ec2:%[2]s:*:security-group/*",
+                          "arn:%[1]s:ec2:%[2]s:*:subnet/*",
+                          "arn:%[1]s:ec2:%[2]s:*:capacity-reservation/*"
+                        ],
+                        "Action": [
+                          "ec2:RunInstances",
+                          "ec2:CreateFleet"
+                        ]
+                      },
+                      {
+                        "Sid": "AllowScopedEC2LaunchTemplateAccessActions",
+                        "Effect": "Allow",
+                        "Resource": "arn:%[1]s:ec2:%[2]s:*:launch-template/*",
+                        "Action": [
+                          "ec2:RunInstances",
+                          "ec2:CreateFleet"
+                        ],
+                        "Condition": {
+                          "StringEquals": {
+                            "aws:ResourceTag/kubernetes.io/cluster/%[4]s": "owned"
+                          },
+                          "StringLike": {
+                            "aws:ResourceTag/karpenter.sh/nodepool": "*"
+                          }
+                        }
+                      },
+                      {
+                        "Sid": "AllowScopedEC2InstanceActionsWithTags",
+                        "Effect": "Allow",
+                        "Resource": [
+                          "arn:%[1]s:ec2:%[2]s:*:fleet/*",
+                          "arn:%[1]s:ec2:%[2]s:*:instance/*",
+                          "arn:%[1]s:ec2:%[2]s:*:volume/*",
+                          "arn:%[1]s:ec2:%[2]s:*:network-interface/*",
+                          "arn:%[1]s:ec2:%[2]s:*:launch-template/*",
+                          "arn:%[1]s:ec2:%[2]s:*:spot-instances-request/*",
+                          "arn:%[1]s:ec2:%[2]s:*:capacity-reservation/*"
+                        ],
+                        "Action": [
+                          "ec2:RunInstances",
+                          "ec2:CreateFleet",
+                          "ec2:CreateLaunchTemplate"
+                        ],
+                        "Condition": {
+                          "StringEquals": {
+                            "aws:RequestTag/kubernetes.io/cluster/%[4]s": "owned",
+                            "aws:RequestTag/eks:eks-cluster-name": "%[4]s"
+                          },
+                          "StringLike": {
+                            "aws:RequestTag/karpenter.sh/nodepool": "*"
+                          }
+                        }
+                      },
+                      {
+                        "Sid": "AllowScopedResourceCreationTagging",
+                        "Effect": "Allow",
+                        "Resource": [
+                          "arn:%[1]s:ec2:%[2]s:*:fleet/*",
+                          "arn:%[1]s:ec2:%[2]s:*:instance/*",
+                          "arn:%[1]s:ec2:%[2]s:*:volume/*",
+                          "arn:%[1]s:ec2:%[2]s:*:network-interface/*",
+                          "arn:%[1]s:ec2:%[2]s:*:launch-template/*",
+                          "arn:%[1]s:ec2:%[2]s:*:spot-instances-request/*"
+                        ],
+                        "Action": "ec2:CreateTags",
+                        "Condition": {
+                          "StringEquals": {
+                            "aws:RequestTag/kubernetes.io/cluster/%[4]s": "owned",
+                            "aws:RequestTag/eks:eks-cluster-name": "%[4]s",
+                            "ec2:CreateAction": [
+                              "RunInstances",
+                              "CreateFleet",
+                              "CreateLaunchTemplate"
+                            ]
+                          },
+                          "StringLike": {
+                            "aws:RequestTag/karpenter.sh/nodepool": "*"
+                          }
+                        }
+                      },
+                      {
+                        "Sid": "AllowScopedResourceTagging",
+                        "Effect": "Allow",
+                        "Resource": "arn:%[1]s:ec2:%[2]s:*:instance/*",
+                        "Action": "ec2:CreateTags",
+                        "Condition": {
+                          "StringEquals": {
+                            "aws:ResourceTag/kubernetes.io/cluster/%[4]s": "owned"
+                          },
+                          "StringLike": {
+                            "aws:ResourceTag/karpenter.sh/nodepool": "*"
+                          },
+                          "StringEqualsIfExists": {
+                            "aws:RequestTag/eks:eks-cluster-name": "%[4]s"
+                          },
+                          "ForAllValues:StringEquals": {
+                            "aws:TagKeys": [
+                              "eks:eks-cluster-name",
+                              "karpenter.sh/nodeclaim",
+                              "Name"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "Sid": "AllowScopedDeletion",
+                        "Effect": "Allow",
+                        "Resource": [
+                          "arn:%[1]s:ec2:%[2]s:*:instance/*",
+                          "arn:%[1]s:ec2:%[2]s:*:launch-template/*"
+                        ],
+                        "Action": [
+                          "ec2:TerminateInstances",
+                          "ec2:DeleteLaunchTemplate"
+                        ],
+                        "Condition": {
+                          "StringEquals": {
+                            "aws:ResourceTag/kubernetes.io/cluster/%[4]s": "owned"
+                          },
+                          "StringLike": {
+                            "aws:ResourceTag/karpenter.sh/nodepool": "*"
+                          }
+                        }
+                      },
+                      {
+                        "Sid": "AllowRegionalReadActions",
+                        "Effect": "Allow",
+                        "Resource": "*",
+                        "Action": [
+                          "ec2:DescribeCapacityReservations",
+                          "ec2:DescribeImages",
+                          "ec2:DescribeInstances",
+                          "ec2:DescribeInstanceTypeOfferings",
+                          "ec2:DescribeInstanceTypes",
+                          "ec2:DescribeLaunchTemplates",
+                          "ec2:DescribeSecurityGroups",
+                          "ec2:DescribeSpotPriceHistory",
+                          "ec2:DescribeSubnets"
+                        ],
+                        "Condition": {
+                          "StringEquals": {
+                            "aws:RequestedRegion": "%[2]s"
+                          }
+                        }
+                      },
+                      {
+                        "Sid": "AllowSSMReadActions",
+                        "Effect": "Allow",
+                        "Resource": "arn:%[1]s:ssm:%[2]s::parameter/aws/service/*",
+                        "Action": "ssm:GetParameter"
+                      },
+                      {
+                        "Sid": "AllowPricingReadActions",
+                        "Effect": "Allow",
+                        "Resource": "*",
+                        "Action": "pricing:GetProducts"
+                      },
+                      {
+                        "Sid": "AllowInterruptionQueueActions",
+                        "Effect": "Allow",
+                        "Resource": "arn:aws:sqs:%[2]s:%[3]s:%[4]s",
+                        "Action": [
+                          "sqs:DeleteMessage",
+                          "sqs:GetQueueUrl",
+                          "sqs:ReceiveMessage"
+                        ]
+                      },
+                      {
+                        "Sid": "AllowPassingInstanceRole",
+                        "Effect": "Allow",
+                        "Resource": "arn:aws:iam::%[3]s:role/karpenter-node-role-%[4]s",
+                        "Action": "iam:PassRole",
+                        "Condition": {
+                          "StringEquals": {
+                            "iam:PassedToService": [
+                              "ec2.amazonaws.com",
+                              "ec2.amazonaws.com.cn"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "Sid": "AllowScopedInstanceProfileCreationActions",
+                        "Effect": "Allow",
+                        "Resource": "arn:%[1]s:iam::%[3]s:instance-profile/*",
+                        "Action": [
+                          "iam:CreateInstanceProfile"
+                        ],
+                        "Condition": {
+                          "StringEquals": {
+                            "aws:RequestTag/kubernetes.io/cluster/%[4]s": "owned",
+                            "aws:RequestTag/eks:eks-cluster-name": "%[4]s",
+                            "aws:RequestTag/topology.kubernetes.io/region": "%[2]s"
+                          },
+                          "StringLike": {
+                            "aws:RequestTag/karpenter.k8s.aws/ec2nodeclass": "*"
+                          }
+                        }
+                      },
+                      {
+                        "Sid": "AllowScopedInstanceProfileTagActions",
+                        "Effect": "Allow",
+                        "Resource": "arn:%[1]s:iam::%[3]s:instance-profile/*",
+                        "Action": [
+                          "iam:TagInstanceProfile"
+                        ],
+                        "Condition": {
+                          "StringEquals": {
+                            "aws:ResourceTag/kubernetes.io/cluster/%[4]s": "owned",
+                            "aws:ResourceTag/topology.kubernetes.io/region": "%[2]s",
+                            "aws:RequestTag/kubernetes.io/cluster/%[4]s": "owned",
+                            "aws:RequestTag/eks:eks-cluster-name": "%[4]s",
+                            "aws:RequestTag/topology.kubernetes.io/region": "%[2]s"
+                          },
+                          "StringLike": {
+                            "aws:ResourceTag/karpenter.k8s.aws/ec2nodeclass": "*",
+                            "aws:RequestTag/karpenter.k8s.aws/ec2nodeclass": "*"
+                          }
+                        }
+                      },
+                      {
+                        "Sid": "AllowScopedInstanceProfileActions",
+                        "Effect": "Allow",
+                        "Resource": "arn:%[1]s:iam::%[3]s:instance-profile/*",
+                        "Action": [
+                          "iam:AddRoleToInstanceProfile",
+                          "iam:RemoveRoleFromInstanceProfile",
+                          "iam:DeleteInstanceProfile"
+                        ],
+                        "Condition": {
+                          "StringEquals": {
+                            "aws:ResourceTag/kubernetes.io/cluster/%[4]s": "owned",
+                            "aws:ResourceTag/topology.kubernetes.io/region": "%[2]s"
+                          },
+                          "StringLike": {
+                            "aws:ResourceTag/karpenter.k8s.aws/ec2nodeclass": "*"
+                          }
+                        }
+                      },
+                      {
+                        "Sid": "AllowInstanceProfileReadActions",
+                        "Effect": "Allow",
+                        "Resource": "arn:%[1]s:iam::%[3]s:instance-profile/*",
+                        "Action": "iam:GetInstanceProfile"
+                      },
+                      {
+                        "Sid": "AllowUnscopedInstanceProfileListAction",
+                        "Effect": "Allow",
+                        "Resource": "*",
+                        "Action": "iam:ListInstanceProfiles"
+                      },
+                      {
+                        "Sid": "AllowAPIServerEndpointDiscovery",
+                        "Effect": "Allow",
+                        "Resource": "arn:%[1]s:eks:%[2]s:%[3]s:cluster/%[4]s",
+                        "Action": "eks:DescribeCluster"
+                      }
+                    ]
+                  }
+            toFieldPath: spec.forProvider.inlinePolicy[0].policy      
+            
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.eks_oidc_issuer     # %[1]s 
+                - fromFieldPath: spec.aws_account_id        # %[2]s 
+                - fromFieldPath: spec.karpenter_namespace   # %[3]s 
+              strategy: string
+              string:
+                fmt: |
+                  {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                      {
+                        "Effect": "Allow",
+                        "Principal": {
+                          "Federated": "arn:aws:iam::%[2]s:oidc-provider/%[1]s"
+                        },
+                        "Action": "sts:AssumeRoleWithWebIdentity",
+                        "Condition": {
+                          "StringEquals": {
+                            "%[1]s:sub": "system:serviceaccount:%[3]s:karpenter"
+                          }
+                        }
+                      }
+                    ]
+                  }
+            toFieldPath: spec.forProvider.assumeRolePolicy

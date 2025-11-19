@@ -68,7 +68,8 @@ install_crossplane() {
 		return 0
 	fi
 
-	helm install crossplane --namespace crossplane-system --create-namespace crossplane-stable/crossplane
+	helm install crossplane --namespace crossplane-system --create-namespace crossplane-stable/crossplane --wait
+	success "Crossplane installed successfully."
 }
 
 run_step "Install Crossplane (helm)" install_crossplane
@@ -78,11 +79,24 @@ run_step "Apply AWS secret" kubectl apply -f ./crossplane/AWS/secret.yaml
 run_step "Apply AWS providers" kubectl apply -f ./crossplane/AWS/providers.yaml
 run_step "Apply AWS provider config (namespace: crossplane-system)" kubectl apply -f ./crossplane/AWS/provider_config.yaml -n crossplane-system
 run_step "Apply AWS XRD" kubectl apply -f ./crossplane/AWS/XRD.yaml
+run_step "Wait for AWS XRD to be established" timeout 120 bash -c 'until kubectl get xrd awsinfra.aws.kfo.io -o jsonpath="{.status.conditions[?(@.type==\"Established\")].status}" | grep True >/dev/null 2>&1; do sleep 5; done' #TODO: dobleckeck this condition
 
 header "Apply AWS Compositions"
 run_step "Apply VPC composition" kubectl apply -f ./crossplane/AWS/Compositions/vpc.yaml
 run_step "Apply IAM composition" kubectl apply -f ./crossplane/AWS/Compositions/iam.yaml
 run_step "Apply SQS composition" kubectl apply -f ./crossplane/AWS/Compositions/sqs.yaml
 run_step "Apply EKS composition" kubectl apply -f ./crossplane/AWS/Compositions/eks.yaml
+run_step "Apply Controller Role composition" kubectl apply -f ./crossplane/AWS/Compositions/controller.yaml
+
+header "Installing Tekton"
+run_step "Apply Tekton installation" kubectl apply -f https://storage.googleapis.com/tekton-releases/operator/latest/release.yaml
+run_step "Wait for Tekton operator to be ready" kubectl wait --for=condition=Available=True --timeout=300s deployment/tekton-operator -n tekton-operator
+run_step "Apply Tekton config" kubectl apply -f https://raw.githubusercontent.com/tektoncd/operator/main/config/crs/kubernetes/config/all/operator_v1alpha1_config_cr.yaml
+success "Tekton installed and configured."
+
+header "Tekton Dashboard"
+# wait for Tekton Dashboard to be ready
+run_step "Wait for Tekton Dashboard to be ready" kubectl wait --for=condition=Available=True --timeout=300s deployment/tekton-dashboard -n tekton-pipelines
+run_step "Portforward Tekton Dashboard" kubectl port-forward -n tekton-pipelines svc/tekton-dashboard 9097:9097 &
 
 info "All steps finished."

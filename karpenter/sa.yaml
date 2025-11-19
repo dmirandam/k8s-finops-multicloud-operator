@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: karpenter
+  namespace: kube-system
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::089372642158:role/eks-dsmm-karpenter-controller-role
+
+
+
+aws eks create-access-entry \
+  --cluster-name eks-dsmm \
+  --principal-arn arn:aws:iam::089372642158:role/karpenter-node-role-eks-dsmm \
+  --type STANDARD

@@ -1,0 +1,68 @@
+{
+    "cluster": {
+        "name": "eks-dsmm",
+        "arn": "arn:aws:eks:us-east-1:089372642158:cluster/eks-dsmm",
+        "createdAt": "2025-11-18T21:18:09.592000-05:00",
+        "version": "1.34",
+        "endpoint": "https://458EBDB913C4B5920B0B45F79D691C2D.gr7.us-east-1.eks.amazonaws.com",
+        "roleArn": "arn:aws:iam::089372642158:role/eks-cluster-role-eks-dsmm",
+        "resourcesVpcConfig": {
+            "subnetIds": [
+                "subnet-057db64bbadf5970d",
+                "subnet-076f9c5eae48d1462"
+            ],
+            "securityGroupIds": [],
+            "clusterSecurityGroupId": "sg-0fed801559040ae8a",
+            "vpcId": "vpc-0b1f65e3be9f76e32",
+            "endpointPublicAccess": true,
+            "endpointPrivateAccess": false,
+            "publicAccessCidrs": [
+                "0.0.0.0/0"
+            ]
+        },
+        "kubernetesNetworkConfig": {
+            "serviceIpv4Cidr": "10.100.0.0/16",
+            "ipFamily": "ipv4",
+            "elasticLoadBalancing": {
+                "enabled": false
+            }
+        },
+        "logging": {
+            "clusterLogging": [
+                {
+                    "types": [
+                        "api",
+                        "audit",
+                        "authenticator",
+                        "controllerManager",
+                        "scheduler"
+                    ],
+                    "enabled": false
+                }
+            ]
+        },
+        "identity": {
+            "oidc": {
+                "issuer": "https://oidc.eks.us-east-1.amazonaws.com/id/458EBDB913C4B5920B0B45F79D691C2D"
+            }
+        },
+        "status": "ACTIVE",
+        "certificateAuthority": {
+            "data": "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURCVENDQWUyZ0F3SUJBZ0lJRlBPMGlRSEc2eG93RFFZSktvWklodmNOQVFFTEJRQXdGVEVUTUJFR0ExVUUKQXhNS2EzVmlaWEp1WlhSbGN6QWVGdzB5TlRFeE1Ua3dNakU1TVRaYUZ3MHpOVEV4TVRjd01qSTBNVFphTUJVeApFekFSQmdOVkJBTVRDbXQxWW1WeWJtVjBaWE13Z2dFaU1BMEdDU3FHU0liM0RRRUJBUVVBQTRJQkR3QXdnZ0VLCkFvSUJBUUROZGt6RzdQRjVLZDBSOUZSSWI4ZVZnV2dLaU9haGM2ZnV4RStJeWFrbHlwOG1UeFk5YUplVW1HTVkKOEdzWE5SbXhuSUVsZDNsUFg2NGF2NFZKcVZBbnVpdmZHWjJUR0xCT1pubjdaVjdHMnErLzBKOEp4MTlQTHF6bQpydzQzbjBxYnp3MW9KSUZyZlJRL2lnR3VuOXpoYzVLVnBDQ0oxNkh4ak03a3hoRE5LR2ZKMjFnVm9QZmVkb1BNClJ3anRrb3JMcnA3RDBHSnphc3RxN0FQUENLeU5kY1oxR2gzeEdRa3JWRzBqR1JEckdzaUdROEJjRlFJUXhzc3AKZkhYaFFGVWx3dXFjTU5zMVdEZTVhSitDR0lkSWR1eDQrd1pkc0lTTng0TlhCU0cvTERxd3k3YVZ6S2JuZGFrbgp2ejBGeWZMOXdsdC82bzJLSE0wZXZYNngzemZEQWdNQkFBR2pXVEJYTUE0R0ExVWREd0VCL3dRRUF3SUNwREFQCkJnTlZIUk1CQWY4RUJUQURBUUgvTUIwR0ExVWREZ1FXQkJTbWk0QjZYSS90YnJNdmVQaE1BelZ0Qk1SS3lqQVYKQmdOVkhSRUVEakFNZ2dwcmRXSmxjbTVsZEdWek1BMEdDU3FHU0liM0RRRUJDd1VBQTRJQkFRQjhzeU9mU3BuZQpNM2w0bGlTRVRCWVJ3c3VuZmR2SlFwYlVWSkUxOFNYbnRnTzFzeVZZU0QzQU1SWVp1S01ONjU1UUJUcmRGekl6CkdaZUZxcE9XNHBSeXUySThVOCtzQ0toc1FSTGR3Y3JpZjhtdlp2cFBFUDMrSGl6WlU4b0tTZFlDVk9TclI4VXEKZnB4R1pLMW4rRVp3anJYbHlrL3hRSWhYelBkTmpIVE5TYXEvTE1HUVRTdlFVRFdDZmIvalB0d1hqY1JnS3pzYQo1TzdoRVVMbnFPUGg4ejJSVnJRbkgvY01XUy95dzFNeDVmSFNEUDV5RHh4V2xXdmdwMldMTURPOG5RT1Y4TDhPCkE0MldSMC9YK05DOStSaDNETFBybCtnRG5aMDR6eVZhRVJubW4wM20wVDI3T2ZpSFh3MTA3RHgwbjdSTHNRK28KTlFHSko4TldBSVpkCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K"
+        },
+        "platformVersion": "eks.9",
+        "tags": {
+            "crossplane-providerconfig": "default",
+            "crossplane-kind": "cluster.eks.aws.m.upbound.io",
+            "crossplane-name": "eks-dsmm",
+            "karpenter.sh/discovery": "eks-dsmm"
+        },
+        "accessConfig": {
+            "authenticationMode": "API_AND_CONFIG_MAP"
+        },
+        "upgradePolicy": {
+            "supportType": "EXTENDED"
+        },
+        "deletionProtection": false
+    }
+}

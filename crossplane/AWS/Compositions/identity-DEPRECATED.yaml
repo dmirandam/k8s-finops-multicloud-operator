@@ -1,0 +1,70 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: awsinfra-identity
+spec:
+  compositeTypeRef:
+    apiVersion: aws.kfo.io/v1alpha1
+    kind: awsinfra
+  mode: Pipeline
+  pipeline:
+  - step: identity-creation
+    functionRef:
+      name: crossplane-contrib-function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      resources:      
+      - name: pod-identity
+        base:
+          apiVersion: eks.aws.m.upbound.io/v1beta1
+          kind: PodIdentityAssociation
+          metadata:
+            name: example-pia
+            namespace: upbound-namespace-placeholder
+          spec:
+            forProvider:
+              serviceAccount: karpenter
+              namespace: karpenter-namespace-placeholder
+              region: aws-region-placeholder
+              clusterNameRef:
+                name: cluster-name-placeholder
+                namespace: upbound-namespace-placeholder
+              roleArnRef:
+                name: karpenter-controller-role-placeholder
+                namespace: upbound-namespace-placeholder
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "pod-identity-%s"
+            toFieldPath: metadata.name
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.clusterNameRef.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.roleArnRef.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.karpenter_namespace
+            toFieldPath: spec.forProvider.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.cluster_name
+            toFieldPath: spec.forProvider.clusterNameRef.name
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "%s-karpenter-controller-role"
+            toFieldPath: spec.forProvider.roleArnRef.name
