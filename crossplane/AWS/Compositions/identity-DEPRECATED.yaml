@@ -66,5 +66,5 @@ spec:
                 - fromFieldPath: spec.cluster_name
               strategy: string
               string:
-                fmt: "%s-karpenter-controller-role"
+                fmt: "karpenter-controller-role-%s"
             toFieldPath: spec.forProvider.roleArnRef.name

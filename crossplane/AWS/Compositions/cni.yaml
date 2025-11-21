@@ -1,0 +1,133 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: awsinfra-cni
+spec:
+  compositeTypeRef:
+    apiVersion: aws.kfo.io/v1alpha1
+    kind: awsinfra
+  mode: Pipeline
+  pipeline:
+  - step: AddonRoleCreation
+    functionRef:
+      name: crossplane-contrib-function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      resources:
+      - name: eks-service-role
+        base:
+          apiVersion: iam.aws.m.upbound.io/v1beta1
+          kind: Role
+          metadata:
+            annotations:
+              meta.upbound.io/example-id: iam/v1beta1/rolepolicy
+          spec:
+            forProvider:
+              assumeRolePolicy: |
+                {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Federated": "arn:aws:iam::089372642158:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/DA94B30181C612F31312C8E14A376652"
+                            },
+                            "Action": "sts:AssumeRoleWithWebIdentity",
+                            "Condition": {
+                                "StringEquals": {
+                                    "oidc.eks.us-east-1.amazonaws.com/id/DA94B30181C612F31312C8E14A376652:aud": "sts.amazonaws.com",
+                                    "oidc.eks.us-east-1.amazonaws.com/id/DA94B30181C612F31312C8E14A376652:sub": "system:serviceaccount:kube-system:aws-node"
+                                }
+                            }
+                        }
+                    ]
+                }
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "addon-role-%s"
+            toFieldPath: metadata.name
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace          
+
+      - name: eks-cluster-role-attachment-AmazonEKS_CNI_Policy
+        base:
+          apiVersion: iam.aws.m.upbound.io/v1beta1
+          kind: RolePolicyAttachment
+          metadata:
+            annotations:
+              meta.upbound.io/example-id: iam/v1beta1/role
+            name: eks-cluster-role-attachments-cluster-policy
+          spec:
+            forProvider:
+              policyArn: arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+              roleRef:
+                name: eks-cluster-role-placeholder
+                namespace: crossplane-system-placeholder
+            providerConfigRef:
+              kind: ClusterProviderConfig
+              name: default
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "addon-role-%s"
+            toFieldPath: spec.forProvider.roleRef.name
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.roleRef.namespace       
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace                 
+
+      - name: vpc-cni-addon
+        base:        
+          apiVersion: eks.aws.m.upbound.io/v1beta1
+          kind: Addon
+          metadata:
+            name: eks-vpc-cni
+            namespace: upbound-namespace-placeholder
+          spec:
+            forProvider:
+              addonName: vpc-cni
+              clusterName: cluster-name-placeholder
+              region: region-placeholder
+              serviceAccountRoleArnRef:
+                name: vpc-cni-role-placeholder
+                namespace: upbound-namespace-placeholder
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "vpc-cni-%s"
+            toFieldPath: metadata.name
+          - fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.cluster_name
+            toFieldPath: spec.forProvider.clusterName
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region          
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "addon-role-%s"
+            toFieldPath: spec.forProvider.serviceAccountRoleArnRef.name
+          - fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.serviceAccountRoleArnRef.namespace                

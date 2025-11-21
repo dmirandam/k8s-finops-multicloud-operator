@@ -62,7 +62,7 @@ spec:
                 - fromFieldPath: spec.cluster_name
               strategy: string
               string:
-                fmt: "eks-cluster-role-%s"
+                fmt: "service-role-%s"
             toFieldPath: spec.forProvider.roleArnRef.name
           - type: FromCompositeFieldPath
             fromFieldPath: spec.upbound_namespace
@@ -88,6 +88,7 @@ spec:
                 namespace: upbound-namespace-placeholder
               nodeRoleArnRef:
                 name: eks-node-role-name-placeholder
+                namespace: upbound-namespace-placeholder
               region: region-placeholder
               scalingConfig:
                 desiredSize: 2
@@ -114,8 +115,10 @@ spec:
                 - fromFieldPath: spec.cluster_name
               strategy: string
               string:
-                fmt: "karpenter-node-role-%s"
+                fmt: "node-role-%s"
             toFieldPath: spec.forProvider.nodeRoleArnRef.name
+          - fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.nodeRoleArnRef.namespace
           - type: FromCompositeFieldPath
             fromFieldPath: spec.aws_region
             toFieldPath: spec.forProvider.region
@@ -144,7 +147,108 @@ spec:
           - fromFieldPath: spec.upbound_namespace
             toFieldPath: spec.forProvider.subnetIdRefs[1].namespace
 
-      - name: addon
+      - name: karpenter-node-access-entry
+        base:
+          apiVersion: eks.aws.m.upbound.io/v1beta1
+          kind: AccessEntry
+          metadata:
+            name: accessentry-placeholder
+            namespace: upbound-namespace-placeholder
+          spec:
+            forProvider:
+              region: region-placeholder
+              clusterNameRef:
+                name: eks-cluster-name-placeholder
+                namespace: upbound-namespace-placeholder
+              principalArnFromRoleRef:
+                name: karpenter-node-role-placeholder
+                namespace: upbound-namespace-placeholder
+                #matchControllerRef: false
+              type: STANDARD
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "karpenter-node-access-%s"
+            toFieldPath: metadata.name
+
+          - fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+
+          - fromFieldPath: spec.cluster_name
+            toFieldPath: spec.forProvider.clusterNameRef.name
+
+          - fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.clusterNameRef.namespace
+
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "node-role-%s"
+            toFieldPath: spec.forProvider.principalArnFromRoleRef.name
+
+          - fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.principalArnFromRoleRef.namespace
+          
+          - fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region
+
+
+      - name: karpenter-pod-identity
+        base:
+          apiVersion: eks.aws.m.upbound.io/v1beta1
+          kind: PodIdentityAssociation
+          metadata:
+            name: podidentity-placeholder
+            namespace: upbound-namespace-placeholder
+          spec:
+            forProvider:
+              clusterName: cluster-placeholder
+              namespace: kube-system
+              serviceAccount: karpenter
+              roleArnRef:
+                name: karpenter-controller-role-placeholder
+                namespace: upbound-namespace-placeholder
+              region: region-placeholder
+        patches:
+          # nombre dinámico
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "pod-identity-%s"
+            toFieldPath: metadata.name
+
+          - fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+
+          - fromFieldPath: spec.cluster_name
+            toFieldPath: spec.forProvider.clusterName
+
+          - fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region
+
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "karpenter-controller-role-%s"
+            toFieldPath: spec.forProvider.roleArnRef.name
+
+          - fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.roleArnRef.namespace
+
+      - name: pod-identity-addon
         base:        
           apiVersion: eks.aws.m.upbound.io/v1beta1
           kind: Addon
@@ -173,3 +277,95 @@ spec:
           - type: FromCompositeFieldPath
             fromFieldPath: spec.aws_region
             toFieldPath: spec.forProvider.region
+
+      - name: metrics-server-addon
+        base:        
+          apiVersion: eks.aws.m.upbound.io/v1beta1
+          kind: Addon
+          metadata:
+            name: eks-metrics-server
+            namespace: upbound-namespace-placeholder
+          spec:
+            forProvider:
+              addonName: metrics-server
+              clusterName: cluster-name-placeholder
+              region: region-placeholder
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "metrics-server-%s"
+            toFieldPath: metadata.name
+          - fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.cluster_name
+            toFieldPath: spec.forProvider.clusterName
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region            
+
+      - name: coredns-addon
+        base:        
+          apiVersion: eks.aws.m.upbound.io/v1beta1
+          kind: Addon
+          metadata:
+            name: eks-coredns
+            namespace: upbound-namespace-placeholder
+          spec:
+            forProvider:
+              addonName: coredns
+              clusterName: cluster-name-placeholder
+              region: region-placeholder
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "coredns-%s"
+            toFieldPath: metadata.name
+          - fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.cluster_name
+            toFieldPath: spec.forProvider.clusterName
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region                 
+
+      - name: kube-proxy-addon
+        base:        
+          apiVersion: eks.aws.m.upbound.io/v1beta1
+          kind: Addon
+          metadata:
+            name: eks-kube-proxy
+            namespace: upbound-namespace-placeholder
+          spec:
+            forProvider:
+              addonName: kube-proxy
+              clusterName: cluster-name-placeholder
+              region: region-placeholder
+        patches:
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "kube-proxy-%s"
+            toFieldPath: metadata.name
+          - fromFieldPath: spec.upbound_namespace
+            toFieldPath: metadata.namespace
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.cluster_name
+            toFieldPath: spec.forProvider.clusterName
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.aws_region
+            toFieldPath: spec.forProvider.region     
+
+ 

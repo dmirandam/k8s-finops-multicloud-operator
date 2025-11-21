@@ -24,7 +24,23 @@ spec:
             namespace: upbound-system-placeholder
           spec:
             forProvider:
-              assumeRolePolicy: "placeholder"
+              assumeRolePolicy: |
+                {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Sid": "AllowEksAuthToAssumeRoleForPodIdentity",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "pods.eks.amazonaws.com"
+                            },
+                            "Action": [
+                                "sts:AssumeRole",
+                                "sts:TagSession"
+                            ]
+                        }
+                    ]
+                }
               inlinePolicy:
                 - name: karpenter-controller-policy
                   policy: "placeholder"
@@ -36,7 +52,7 @@ spec:
                 - fromFieldPath: spec.cluster_name
               strategy: string
               string:
-                fmt: "%s-karpenter-controller-role"
+                fmt: "karpenter-controller-role-%s"
             toFieldPath: metadata.name
           
           - type: CombineFromComposite
@@ -332,31 +348,4 @@ spec:
                     ]
                   }
             toFieldPath: spec.forProvider.inlinePolicy[0].policy      
-            
-          - type: CombineFromComposite
-            combine:
-              variables:
-                - fromFieldPath: spec.eks_oidc_issuer     # %[1]s 
-                - fromFieldPath: spec.aws_account_id        # %[2]s 
-                - fromFieldPath: spec.karpenter_namespace   # %[3]s 
-              strategy: string
-              string:
-                fmt: |
-                  {
-                    "Version": "2012-10-17",
-                    "Statement": [
-                      {
-                        "Effect": "Allow",
-                        "Principal": {
-                          "Federated": "arn:aws:iam::%[2]s:oidc-provider/%[1]s"
-                        },
-                        "Action": "sts:AssumeRoleWithWebIdentity",
-                        "Condition": {
-                          "StringEquals": {
-                            "%[1]s:sub": "system:serviceaccount:%[3]s:karpenter"
-                          }
-                        }
-                      }
-                    ]
-                  }
-            toFieldPath: spec.forProvider.assumeRolePolicy
+          
