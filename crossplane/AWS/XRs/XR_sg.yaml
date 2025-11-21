@@ -1,15 +1,11 @@
 apiVersion: aws.kfo.io/v1alpha1
 kind: awsinfra
 metadata:
-  name: identity-role-dsmm
+  name: sg-dsmm
   namespace: crossplane-system       
 spec:
   crossplane:
     compositionRef:
-      name: awsinfra-identity       
+      name: awsinfra-sg       
   cluster_name: eks-dsmm-test
-  aws_partition: "aws"
   aws_region: "us-east-1"
-  upbound_namespace: crossplane-system
-  karpenter_namespace: kube-system
-  

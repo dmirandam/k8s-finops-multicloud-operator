@@ -1,0 +1,253 @@
+
+#IMPORTANT: depends on the vpc being created first
+#TODO: Impelement status fields to export the SG IDs
+#TODO: REMOVE USE REF ONLY GROUP IDS:
+          # - type: FromCompositeFieldPath
+          #   fromFieldPath: status.eksClusterSecurityGroupId
+          #   toFieldPath: spec.forProvider.groupId
+
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: awsinfra-sg
+spec:
+  compositeTypeRef:
+    apiVersion: aws.kfo.io/v1alpha1
+    kind: awsinfra
+
+  mode: Pipeline
+
+  pipeline:
+  - step: sg-creation
+    functionRef:
+      name: crossplane-contrib-function-patch-and-transform
+
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+
+      patchSets:
+        - name: common-aws-fields
+          patches:
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.aws_region
+              toFieldPath: spec.forProvider.region
+
+      resources:
+      ###########################################################################
+      # 1) Shared Node SG — ClusterSharedNodeSecurityGroup
+      ###########################################################################
+      - name: cluster-shared-node-sg
+        base:
+          apiVersion: ec2.aws.m.upbound.io/v1beta1
+          kind: SecurityGroup
+          metadata:
+            name: cluster-shared-node-sg-placeholder
+            namespace: crossplane-system
+          spec:
+            forProvider:
+              description: "Communication between all nodes in the cluster"
+              vpcIdRef:
+                name: vpc-id-ref-placeholder
+                namespace: crossplane-system
+              tags:
+                Name: placeholder
+        patches:
+          - type: PatchSet
+            patchSetName: common-aws-fields
+          
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "vpc-%s"
+            toFieldPath: spec.forProvider.vpcIdRef.name
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.vpcIdRef.namespace
+
+          # Name tag
+          - type: CombineFromComposite
+            toFieldPath: spec.forProvider.tags[Name]
+            combine:
+              strategy: string
+              string:
+                fmt: "%s/ClusterSharedNodeSecurityGroup"
+              variables:
+                - fromFieldPath: spec.cluster_name
+
+          - type: CombineFromComposite
+            toFieldPath: metadata.name
+            combine:
+              strategy: string
+              string:
+                fmt: "%s-cluster-shared-node-security-group"
+              variables:
+                - fromFieldPath: spec.cluster_name               
+
+      ###########################################################################
+      # 2) ControlPlaneSecurityGroup — para el EKS ControlPlane
+      ###########################################################################
+      - name: controlplane-sg
+        base:
+          apiVersion: ec2.aws.m.upbound.io/v1beta1
+          kind: SecurityGroup
+          metadata:
+            name: controlplane-sg-placeholder
+            namespace: crossplane-system
+          spec:
+            forProvider:
+              description: "Communication between control plane and worker nodegroups"
+              vpcIdRef:
+                name: vpc-id-ref-placeholder
+                namespace: crossplane-system
+              tags:
+                Name: placeholder
+        patches:
+          - type: PatchSet
+            patchSetName: common-aws-fields
+
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "vpc-%s"
+            toFieldPath: spec.forProvider.vpcIdRef.name
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.vpcIdRef.namespace
+
+          # Name tag
+          - type: CombineFromComposite
+            toFieldPath: spec.forProvider.tags[Name]
+            combine:
+              strategy: string
+              string:
+                fmt: "%s/ControlPlaneSecurityGroup"
+              variables:
+                - fromFieldPath: spec.cluster_name
+
+          - type: CombineFromComposite
+            toFieldPath: metadata.name
+            combine:
+              strategy: string
+              string:
+                fmt: "%s-controlplane-security-group"
+              variables:
+                - fromFieldPath: spec.cluster_name
+      ###########################################################################
+      # 3) Ingress: ControlPlane SG -> Shared Node SG
+      ###########################################################################
+      - name: ingress-defaultcluster-to-node
+        base:
+          apiVersion: ec2.aws.m.upbound.io/v1beta1
+          kind: SecurityGroupIngressRule
+          metadata:
+            name: ingress-defaultcluster-to-node-placeholder
+            namespace: crossplane-system
+          spec:
+            forProvider:
+              description: "Allow managed and unmanaged nodes to communicate (all ports)"
+              fromPort: 0
+              toPort: 65535
+              ipProtocol: "-1"
+              securityGroupIdRef:
+                name: cluster-shared-node-sg
+                namespace: crossplane-system
+        patches:
+          - type: PatchSet
+            patchSetName: common-aws-fields        
+
+          - type: CombineFromComposite
+            toFieldPath: spec.forProvider.securityGroupIdRef.name
+            combine:
+              strategy: string
+              string:
+                fmt: "%s-cluster-shared-node-security-group"
+              variables:
+                - fromFieldPath: spec.cluster_name
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.securityGroupIdRef.namespace
+
+      ###########################################################################
+      # 4) Ingress: Shared Node SG -> Shared Node SG
+      ###########################################################################
+      - name: ingress-node-to-node
+        base:
+          apiVersion: ec2.aws.m.upbound.io/v1beta1
+          kind: SecurityGroupIngressRule
+          metadata:
+            name: ingress-node-to-node-placeholder
+            namespace: crossplane-system
+          spec:
+            forProvider:
+              description: "Allow node to node communication (all ports)"
+              fromPort: 0
+              toPort: 65535
+              ipProtocol: "-1"
+              securityGroupIdRef:
+                name: cluster-shared-node-sg
+                namespace: crossplane-system
+        patches:
+          - type: PatchSet
+            patchSetName: common-aws-fields        
+          # both source and destination SG = ClusterSharedNodeSecurityGroup
+          - type: FromCompositeFieldPath
+            fromFieldPath: status.clusterSharedNodeSecurityGroupId
+            toFieldPath: spec.forProvider.groupId
+
+          - type: CombineFromComposite
+            toFieldPath: spec.forProvider.securityGroupIdRef.name
+            combine:
+              strategy: string
+              string:
+                fmt: "%s-cluster-shared-node-security-group"
+              variables:
+                - fromFieldPath: spec.cluster_name
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.securityGroupIdRef.namespace            
+
+      ###########################################################################
+      # 5) Ingress: Node SG -> ControlPlaneDefaultClusterSG
+      ###########################################################################
+      - name: ingress-node-to-defaultcluster
+        base:
+          apiVersion: ec2.aws.m.upbound.io/v1beta1
+          kind: SecurityGroupIngressRule
+          metadata:
+            name: ingress-node-to-defaultcluster-placeholder
+            namespace: crossplane-system
+          spec:
+            forProvider:
+              description: "Allow nodes to communicate with control plane"
+              fromPort: 0
+              toPort: 65535
+              ipProtocol: "-1"
+              securityGroupIdRef:
+                name: controlplane-sg
+                namespace: crossplane-system
+        patches:
+          - type: PatchSet
+            patchSetName: common-aws-fields        
+          # groupId = ClusterSecurityGroupId (del ControlPlane EKS)
+          - type: FromCompositeFieldPath
+            fromFieldPath: status.eksClusterSecurityGroupId
+            toFieldPath: spec.forProvider.groupId
+
+          - type: CombineFromComposite
+            toFieldPath: spec.forProvider.securityGroupIdRef.name
+            combine:
+              strategy: string
+              string:
+                fmt: "%s-controlplane-security-group"
+              variables:
+                - fromFieldPath: spec.cluster_name
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.securityGroupIdRef.namespace

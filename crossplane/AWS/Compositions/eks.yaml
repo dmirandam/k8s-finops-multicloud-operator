@@ -77,7 +77,10 @@ spec:
             namespace: upbound-namespace-placeholder
           spec:
             forProvider:
-              subnetIdRefs: 
+              launchTemplate:
+                name: eks-launch-template-name-placeholder #TODO: create thye patch for this
+                version: 1
+              subnetIdRefs:
                 - name: eks-private-subnet-1-placeholder
                   namespace: upbound-namespace-placeholder
                 - name: eks-private-subnet-2-placeholder

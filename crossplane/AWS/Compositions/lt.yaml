@@ -1,0 +1,136 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: awsinfra-lt
+spec:
+  compositeTypeRef:
+    apiVersion: aws.kfo.io/v1alpha1
+    kind: awsinfra
+  mode: Pipeline
+  pipeline:
+  - step: lt-creation
+    functionRef:
+      name: crossplane-contrib-function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+
+      patchSets:
+        - name: common-aws-fields
+          patches:
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.aws_region
+              toFieldPath: spec.forProvider.region
+
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.cluster_name
+              toFieldPath: spec.forProvider.tagSpecifications[0].tags[karpenter.sh/discovery]
+
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.nodegroup_name
+              toFieldPath: spec.forProvider.tagSpecifications[0].tags[alpha.eksctl.io/nodegroup-name]
+
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.nodegroup_name
+              toFieldPath: spec.forProvider.tagSpecifications[1].tags[alpha.eksctl.io/nodegroup-name]
+
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.nodegroup_name
+              toFieldPath: spec.forProvider.tagSpecifications[2].tags[alpha.eksctl.io/nodegroup-name]
+
+            - type: FromCompositeFieldPath
+              fromFieldPath: spec.cluster_name
+              toFieldPath: metadata.labels[karpenter.sh/discovery]
+
+      resources:
+      - name: launch-template
+        base:
+          apiVersion: ec2.aws.m.upbound.io/v1beta1
+          kind: LaunchTemplate
+          metadata:
+            name: launch-template-placeholder
+            namespace: crossplane-system
+          spec:
+            forProvider:
+              launchTemplateName: placeholder-name
+
+              blockDeviceMappings:
+                - deviceName: /dev/xvda
+                  ebs:
+                    volumeType: gp3
+                    volumeSize: 80
+                    iops: 3000
+                    throughput: 125
+
+              metadataOptions:
+                httpTokens: required
+                httpPutResponseHopLimit: 2
+
+              securityGroupIds: []
+
+              tagSpecifications:
+                - resourceType: instance
+                  tags:
+                    Name: placeholder
+                    alpha.eksctl.io/nodegroup-type: managed
+                    karpenter.sh/discovery: placeholder
+                - resourceType: volume
+                  tags:
+                    Name: placeholder
+                    alpha.eksctl.io/nodegroup-type: managed
+                    karpenter.sh/discovery: placeholder
+                - resourceType: network-interface
+                  tags:
+                    Name: placeholder
+                    alpha.eksctl.io/nodegroup-type: managed
+                    karpenter.sh/discovery: placeholder
+
+        patches:
+        - type: CombineFromComposite
+          toFieldPath: spec.forProvider.launchTemplateName
+          combine:
+            strategy: string
+            string:
+              fmt: "%s-launch-template"
+            variables:
+              - fromFieldPath: spec.cluster_name
+
+        # Parchar SecurityGroupIds
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.securityGroupId
+          toFieldPath: spec.forProvider.securityGroupIds[0]
+
+        # Patch Name tag dinámico
+        - type: CombineFromComposite
+          toFieldPath: spec.forProvider.tagSpecifications[0].tags[Name]
+          combine:
+            strategy: string
+            string:
+              fmt: "%s-%s-node"
+            variables:
+              - fromFieldPath: spec.cluster_name
+              - fromFieldPath: spec.nodegroup_name
+
+        - type: CombineFromComposite
+          toFieldPath: spec.forProvider.tagSpecifications[1].tags[Name]
+          combine:
+            strategy: string
+            string:
+              fmt: "%s-%s-node"
+            variables:
+              - fromFieldPath: spec.cluster_name
+              - fromFieldPath: spec.nodegroup_name
+
+        - type: CombineFromComposite
+          toFieldPath: spec.forProvider.tagSpecifications[2].tags[Name]
+          combine:
+            strategy: string
+            string:
+              fmt: "%s-%s-node"
+            variables:
+              - fromFieldPath: spec.cluster_name
+              - fromFieldPath: spec.nodegroup_name
+
+        # Aplicar patch set común
+        - type: PatchSet
+          patchSetName: common-aws-fields

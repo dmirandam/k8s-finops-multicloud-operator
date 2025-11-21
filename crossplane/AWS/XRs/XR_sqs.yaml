@@ -7,7 +7,7 @@ spec:
   crossplane:
     compositionRef:
       name: awsinfra-sqs
-  cluster_name: eks-dsmm
+  cluster_name: eks-dsmm-test
   aws_partition: "aws"
   aws_region: "us-east-1"
   aws_account_id: "089372642158"

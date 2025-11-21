@@ -53,7 +53,7 @@ spec:
                 enableDnsSupport: true
                 enableDnsHostnames: true
                 tags:
-                  Name: eksctl-like-vpc
+                  Name: cluster-vpc
           patches:
             - type: PatchSet
               patchSetName: common-aws-fields
@@ -65,6 +65,14 @@ spec:
                 string:
                   fmt: "vpc-%s"
               toFieldPath: metadata.name        
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: spec.cluster_name
+                strategy: string
+                string:
+                  fmt: "vpc-%s"
+              toFieldPath: spec.forProvider.tags[Name]               
         # Elastic IP para el NAT Gateway
         - name: eip-nat
           base:
