@@ -1,0 +1,307 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: download-cloudformation-template
+  namespace: tekton-pipelines
+spec:
+  params:
+  - name: KARPENTER_VERSION
+  workspaces:
+  - name: output
+  steps:
+  - name: download
+    image: psiquedelos/kfo-tekton:1.0.0
+    env:
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials
+          key: AWS_ACCESS_KEY_ID
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials
+          key: AWS_SECRET_ACCESS_KEY
+    - name: AWS_DEFAULT_REGION
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials
+          key: AWS_DEFAULT_REGION    
+    script: |
+      #!/usr/bin/env sh
+      curl -fsSL "https://raw.githubusercontent.com/aws/karpenter-provider-aws/v$(params.KARPENTER_VERSION)/website/content/en/preview/getting-started/getting-started-with-karpenter/cloudformation.yaml" \
+        > /workspace/output/cloudformation.yaml
+      ls /workspace/output
+      
+
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: deploy-cloudformation
+  namespace: tekton-pipelines
+spec:
+  params:
+  - name: STACK_NAME
+  - name: TEMPLATE_PATH
+  - name: CLUSTER_NAME
+  - name: KARPENTER_VERSION
+  workspaces:
+  - name: output
+  steps:
+  - name: deploy
+    image: psiquedelos/kfo-tekton:1.0.0
+    env:
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials
+          key: AWS_ACCESS_KEY_ID
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials
+          key: AWS_SECRET_ACCESS_KEY
+    - name: AWS_DEFAULT_REGION
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials
+          key: AWS_DEFAULT_REGION    
+    script: |
+      #!/usr/bin/env sh
+      curl -fsSL "https://raw.githubusercontent.com/aws/karpenter-provider-aws/v$(params.KARPENTER_VERSION)/website/content/en/preview/getting-started/getting-started-with-karpenter/cloudformation.yaml" \
+        > /workspace/output/cloudformation.yaml
+      
+      aws cloudformation deploy \
+        --stack-name "$(params.STACK_NAME)" \
+        --template-file "$(params.TEMPLATE_PATH)" \
+        --capabilities CAPABILITY_NAMED_IAM \
+        --parameter-overrides "ClusterName=$(params.CLUSTER_NAME)"
+
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: create-eks-cluster
+  namespace: tekton-pipelines
+spec:
+  params:
+  - name: CLUSTER_NAME
+  - name: K8S_VERSION
+  - name: KARPENTER_NAMESPACE
+  - name: AWS_PARTITION
+  - name: AWS_ACCOUNT_ID
+  - name: AWS_REGION
+  workspaces:
+  - name: output  
+  steps:
+  - name: run-eksctl
+    image: psiquedelos/kfo-tekton:1.0.0
+    env:
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials
+          key: AWS_ACCESS_KEY_ID
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials
+          key: AWS_SECRET_ACCESS_KEY
+    - name: AWS_DEFAULT_REGION
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials
+          key: AWS_DEFAULT_REGION    
+    script: |
+      #!/usr/bin/env sh
+
+      eksctl create cluster -f - <<EOF
+      ---
+      apiVersion: eksctl.io/v1alpha5
+      kind: ClusterConfig
+      metadata:
+        name: $(params.CLUSTER_NAME)
+        region: $(params.AWS_REGION)
+        version: "$(params.K8S_VERSION)"
+        tags:
+          karpenter.sh/discovery: $(params.CLUSTER_NAME)
+
+      iam:
+        withOIDC: true
+        podIdentityAssociations:
+        - namespace: "$(params.KARPENTER_NAMESPACE)"
+          serviceAccountName: karpenter
+          roleName: $(params.CLUSTER_NAME)-karpenter
+          permissionPolicyARNs:
+          - arn:$(params.AWS_PARTITION):iam::$(params.AWS_ACCOUNT_ID):policy/KarpenterControllerPolicy-$(params.CLUSTER_NAME)
+
+      iamIdentityMappings:
+      - arn: "arn:$(params.AWS_PARTITION):iam::$(params.AWS_ACCOUNT_ID):role/KarpenterNodeRole-$(params.CLUSTER_NAME)"
+        username: system:node:{{EC2PrivateDNSName}}
+        groups:
+        - system:bootstrappers
+        - system:nodes
+
+      managedNodeGroups:
+      - instanceType: m5.large
+        amiFamily: AmazonLinux2023
+        name: $(params.CLUSTER_NAME)-ng
+        desiredCapacity: 2
+        minSize: 1
+        maxSize: 10
+
+      addons:
+      - name: eks-pod-identity-agent
+      EOF
+
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: fetch-karpenter-info
+  namespace: tekton-pipelines
+spec:
+  params:
+  - name: CLUSTER_NAME
+  - name: AWS_PARTITION
+  - name: AWS_ACCOUNT_ID
+  workspaces:
+  - name: output  
+  steps:
+  - name: info
+    image: psiquedelos/kfo-tekton:1.0.0
+    env:
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials
+          key: AWS_ACCESS_KEY_ID
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials
+          key: AWS_SECRET_ACCESS_KEY
+    - name: AWS_DEFAULT_REGION
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials
+          key: AWS_DEFAULT_REGION    
+    script: |
+      #!/usr/bin/env sh
+
+      ENDPOINT=$(aws eks describe-cluster \
+        --name "$(params.CLUSTER_NAME)" \
+        --query "cluster.endpoint" \
+        --output text)
+
+      ROLE_ARN="arn:$(params.AWS_PARTITION):iam::$(params.AWS_ACCOUNT_ID):role/$(params.CLUSTER_NAME)-karpenter"
+
+      echo "Cluster Endpoint: $ENDPOINT"
+      echo "Karpenter IAM Role ARN: $ROLE_ARN"
+
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: install-karpenter
+  namespace: tekton-pipelines
+spec:
+  params:
+  - name: CLUSTER_NAME
+  - name: KARPENTER_VERSION
+  - name: AWS_DEFAULT_REGION
+  - name: KARPENTER_NAMESPACE
+  - name: K8S_VERSION
+  workspaces:
+  - name: output  
+  steps:
+  - name: info
+    image: psiquedelos/kfo-tekton:1.0.0
+    env:
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials
+          key: AWS_ACCESS_KEY_ID
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials
+          key: AWS_SECRET_ACCESS_KEY
+    - name: AWS_DEFAULT_REGION
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials
+          key: AWS_DEFAULT_REGION    
+    script: |
+      #!/usr/bin/env sh
+        aws eks update-kubeconfig --region $(params.AWS_DEFAULT_REGION) --name $(params.CLUSTER_NAME)
+        
+        helm registry logout public.ecr.aws
+
+        helm upgrade --install karpenter oci://public.ecr.aws/karpenter/karpenter --version "${KARPENTER_VERSION}" --namespace "$(params.KARPENTER_NAMESPACE)" --create-namespace \
+          --set "settings.clusterName=$(params.CLUSTER_NAME)" \
+          --set "settings.interruptionQueue=$(params.CLUSTER_NAME)" \
+          --set controller.resources.requests.cpu=1 \
+          --set controller.resources.requests.memory=1Gi \
+          --set controller.resources.limits.cpu=1 \
+          --set controller.resources.limits.memory=1Gi \
+          --wait
+        
+        export ALIAS_VERSION="$(aws ssm get-parameter --name "/aws/service/eks/optimized-ami/$(params.K8S_VERSION)/amazon-linux-2023/x86_64/standard/recommended/image_id" --query Parameter.Value | xargs aws ec2 describe-images --query 'Images[0].Name' --image-ids | sed -r 's/^.*(v[[:digit:]]+).*$/\1/')"
+
+        cat <<EOF | envsubst | kubectl apply -f -
+        apiVersion: karpenter.sh/v1
+        kind: NodePool
+        metadata:
+          name: default
+        spec:
+          template:
+            spec:
+              requirements:
+                - key: kubernetes.io/arch
+                  operator: In
+                  values: ["amd64"]
+                - key: kubernetes.io/os
+                  operator: In
+                  values: ["linux"]
+                - key: karpenter.sh/capacity-type
+                  operator: In
+                  values: ["on-demand"]
+                - key: karpenter.k8s.aws/instance-category
+                  operator: In
+                  values: ["c", "m", "r"]
+                - key: karpenter.k8s.aws/instance-generation
+                  operator: Gt
+                  values: ["2"]
+              nodeClassRef:
+                group: karpenter.k8s.aws
+                kind: EC2NodeClass
+                name: default
+              expireAfter: 720h # 30 * 24h = 720h
+          limits:
+            cpu: 1000
+          disruption:
+            consolidationPolicy: WhenEmptyOrUnderutilized
+            consolidateAfter: 1m
+        ---
+        apiVersion: karpenter.k8s.aws/v1
+        kind: EC2NodeClass
+        metadata:
+          name: default
+        spec:
+          role: "KarpenterNodeRole-$(params.CLUSTER_NAME)" 
+          amiSelectorTerms:
+            - alias: "al2023@${ALIAS_VERSION}"
+          subnetSelectorTerms:
+            - tags:
+                karpenter.sh/discovery: "$(params.CLUSTER_NAME)" 
+          securityGroupSelectorTerms:
+            - tags:
+                karpenter.sh/discovery: "$(params.CLUSTER_NAME)" 
+        EOF

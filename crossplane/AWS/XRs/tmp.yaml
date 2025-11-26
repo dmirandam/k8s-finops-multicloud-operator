@@ -1,0 +1,51 @@
+
+
+      - name: controlplane-sg
+        base:
+          apiVersion: ec2.aws.m.upbound.io/v1beta1
+          kind: SecurityGroup
+          metadata:
+            name: controlplane-sg-placeholder
+            namespace: crossplane-system
+          spec:
+            forProvider:
+              description: "Communication between control plane and worker nodegroups"
+              vpcIdRef:
+                name: vpc-id-ref-placeholder
+                namespace: crossplane-system
+              tags:
+                Name: placeholder
+        patches:
+          - type: PatchSet
+            patchSetName: common-aws-fields
+
+          - type: CombineFromComposite
+            combine:
+              variables:
+                - fromFieldPath: spec.cluster_name
+              strategy: string
+              string:
+                fmt: "vpc-%s"
+            toFieldPath: spec.forProvider.vpcIdRef.name
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.vpcIdRef.namespace
+
+          # Name tag
+          - type: CombineFromComposite
+            toFieldPath: spec.forProvider.tags[Name]
+            combine:
+              strategy: string
+              string:
+                fmt: "%s-ControlPlaneSecurityGroup"
+              variables:
+                - fromFieldPath: spec.cluster_name
+
+          - type: CombineFromComposite
+            toFieldPath: metadata.name
+            combine:
+              strategy: string
+              string:
+                fmt: "%s-controlplane-security-group"
+              variables:
+                - fromFieldPath: spec.cluster_name

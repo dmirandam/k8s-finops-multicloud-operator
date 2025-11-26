@@ -1,0 +1,105 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: karpenter-bootstrap
+  namespace: tekton-pipelines
+spec:
+  params:
+  - name: KARPENTER_NAMESPACE
+    default: kube-system
+  - name: KARPENTER_VERSION
+    default: "1.8.1"
+  - name: K8S_VERSION
+    default: "1.34"
+  - name: AWS_PARTITION
+    default: "aws"
+  - name: AWS_DEFAULT_REGION
+    default: "us-west-2"
+  - name: CLUSTER_NAME
+  - name: AWS_ACCOUNT_ID
+
+  workspaces:
+  - name: output  
+  
+  tasks:
+  - name: download-cf-template
+    taskRef:
+      name: download-cloudformation-template
+    workspaces:
+    - name: output
+      workspace: output      
+    params:
+    - name: KARPENTER_VERSION
+      value: $(params.KARPENTER_VERSION)
+
+  - name: deploy-cloudformation
+    runAfter: [download-cf-template]
+    taskRef:
+      name: deploy-cloudformation
+    workspaces:
+    - name: output
+      workspace: output       
+    params:
+    - name: STACK_NAME
+      value: Karpenter-$(params.CLUSTER_NAME)
+    - name: TEMPLATE_PATH
+      value: /workspace/output/cloudformation.yaml
+    - name: CLUSTER_NAME
+      value: $(params.CLUSTER_NAME)
+    - name: KARPENTER_VERSION
+      value: $(params.KARPENTER_VERSION)      
+
+  - name: create-eks-cluster
+    runAfter: [deploy-cloudformation]
+    taskRef:
+      name: create-eks-cluster
+    workspaces:
+    - name: output
+      workspace: output       
+    params:
+    - name: CLUSTER_NAME
+      value: $(params.CLUSTER_NAME)
+    - name: K8S_VERSION
+      value: $(params.K8S_VERSION)
+    - name: KARPENTER_NAMESPACE
+      value: $(params.KARPENTER_NAMESPACE)
+    - name: AWS_PARTITION
+      value: $(params.AWS_PARTITION)
+    - name: AWS_ACCOUNT_ID
+      value: $(params.AWS_ACCOUNT_ID)
+    - name: AWS_REGION
+      value: $(params.AWS_DEFAULT_REGION)
+
+  - name: fetch-info
+    runAfter: [create-eks-cluster]
+    taskRef:
+      name: fetch-karpenter-info
+    workspaces:
+    - name: output
+      workspace: output       
+    params:
+    - name: CLUSTER_NAME
+      value: $(params.CLUSTER_NAME)
+    - name: AWS_PARTITION
+      value: $(params.AWS_PARTITION)
+    - name: AWS_ACCOUNT_ID
+      value: $(params.AWS_ACCOUNT_ID)
+
+  - name: install-karpenter
+    runAfter: [fetch-info]
+    taskRef:
+      name: install-karpenter
+    workspaces:
+    - name: output
+      workspace: output       
+    params:
+    - name: CLUSTER_NAME
+      value: $(params.CLUSTER_NAME)
+    - name: KARPENTER_NAMESPACE
+      value: $(params.KARPENTER_NAMESPACE)
+    - name: KARPENTER_VERSION
+      value: $(params.KARPENTER_VERSION)
+    - name: AWS_DEFAULT_REGION
+      value: $(params.AWS_DEFAULT_REGION)
+    - name: K8S_VERSION
+      value: $(params.K8S_VERSION)

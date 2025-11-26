@@ -7,6 +7,6 @@ spec:
   crossplane:
     compositionRef:
       name: awsinfra-vpc
-  cluster_name: eks-dsmm-test
+  cluster_name: eks-dsmm-test2
   aws_region: us-east-1
   upbound_namespace: crossplane-system

@@ -39,6 +39,9 @@ spec:
                   matchLabels:
                     aws.kfo.io/subnet-type: private
                     aws.kfo.io/cluster-name: cluster-name-placeholder
+                securityGroupIdRefs:
+                  - name: controlplane-sg-placeholder
+                    namespace: upbound-namespace-placeholder    
         patches:
           - type: FromCompositeFieldPath
             fromFieldPath: spec.cluster_name
@@ -66,7 +69,18 @@ spec:
             toFieldPath: spec.forProvider.roleArnRef.name
           - type: FromCompositeFieldPath
             fromFieldPath: spec.upbound_namespace
-            toFieldPath: spec.forProvider.roleArnRef.namespace                         
+            toFieldPath: spec.forProvider.roleArnRef.namespace      
+          - type: CombineFromComposite
+            toFieldPath: spec.forProvider.vpcConfig.securityGroupIdRefs[0].name
+            combine:
+              strategy: string
+              string:
+                fmt: "%s-control-plane-security-group"
+              variables:
+                - fromFieldPath: spec.cluster_name 
+          - type: FromCompositeFieldPath
+            fromFieldPath: spec.upbound_namespace
+            toFieldPath: spec.forProvider.vpcConfig.securityGroupIdRefs[0].namespace                   
 
       - name: node-group 
         base:
@@ -77,9 +91,9 @@ spec:
             namespace: upbound-namespace-placeholder
           spec:
             forProvider:
-              launchTemplate:
-                name: eks-launch-template-name-placeholder #TODO: create thye patch for this
-                version: 1
+              # launchTemplate:
+              #   name: eks-launch-template-name-placeholder #TODO: create thye patch for this
+              #   version: 1
               subnetIdRefs:
                 - name: eks-private-subnet-1-placeholder
                   namespace: upbound-namespace-placeholder

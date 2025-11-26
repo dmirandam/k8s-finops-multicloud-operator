@@ -53,3 +53,8 @@ spec:
             eks_oidc_issuer:
               description: The OIDC issuer URL for the EKS cluster.
               type: string
+        status:
+          type: object
+          properties:
+            clusterSharedNodeSGId:
+              type: string

@@ -1,0 +1,17 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: karpenter-bootstrap-run3
+  namespace: tekton-pipelines
+spec:
+  pipelineRef:
+    name: karpenter-bootstrap
+  params:
+  - name: CLUSTER_NAME
+    value: tekton-demoo
+  - name: AWS_ACCOUNT_ID
+    value: "089372642158"
+  workspaces:
+  - name: output
+    emptyDir: {}
+  serviceAccountName: tekton-aws-runner
