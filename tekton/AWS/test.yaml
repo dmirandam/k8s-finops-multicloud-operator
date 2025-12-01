@@ -1,0 +1,149 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: karpenter-bootstrap-test
+  namespace: tekton-pipelines
+spec:
+  params:
+  - name: KARPENTER_NAMESPACE
+    default: kube-system
+  - name: KARPENTER_VERSION
+    default: "1.8.1"
+  - name: K8S_VERSION
+    default: "1.34"
+  - name: AWS_PARTITION
+    default: "aws"
+  - name: AWS_DEFAULT_REGION
+    default: "us-west-2"
+  - name: CLUSTER_NAME
+  - name: AWS_ACCOUNT_ID
+
+  workspaces:
+  - name: output
+  
+  tasks:
+  - name: install-karpenter-test
+    taskRef:
+      name: install-karpenter-test
+    workspaces:
+    - name: output
+      workspace: output       
+    params:
+    - name: CLUSTER_NAME
+      value: $(params.CLUSTER_NAME)
+    - name: KARPENTER_NAMESPACE
+      value: $(params.KARPENTER_NAMESPACE)
+    - name: KARPENTER_VERSION
+      value: $(params.KARPENTER_VERSION)
+    - name: AWS_DEFAULT_REGION
+      value: $(params.AWS_DEFAULT_REGION)
+    - name: K8S_VERSION
+      value: $(params.K8S_VERSION)
+
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: install-karpenter-test
+  namespace: tekton-pipelines
+spec:
+  params:
+  - name: CLUSTER_NAME
+  - name: KARPENTER_VERSION
+  - name: AWS_DEFAULT_REGION
+  - name: KARPENTER_NAMESPACE
+  - name: K8S_VERSION
+  workspaces:
+  - name: output  
+  steps:
+  - name: karpenter-install
+    image: psiquedelos/kfo-tekton:1.1.0
+    env:
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials
+          key: AWS_ACCESS_KEY_ID
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials
+          key: AWS_SECRET_ACCESS_KEY
+    - name: AWS_DEFAULT_REGION
+      valueFrom:
+        secretKeyRef:
+          name: aws-credentials
+          key: AWS_DEFAULT_REGION    
+    script: |
+      #!/usr/bin/env sh
+      aws eks update-kubeconfig \
+        --region $(params.AWS_DEFAULT_REGION) \
+        --name $(params.CLUSTER_NAME) \
+        --kubeconfig /tekton/home/.kube/config
+
+      export KUBECONFIG=/tekton/home/.kube/config
+
+      helm registry logout public.ecr.aws
+
+      helm upgrade --install karpenter oci://public.ecr.aws/karpenter/karpenter --version "$(params.KARPENTER_VERSION)" --namespace "$(params.KARPENTER_NAMESPACE)" --timeout 15m --create-namespace \
+        --set "settings.clusterName=$(params.CLUSTER_NAME)" \
+        --set "settings.interruptionQueue=$(params.CLUSTER_NAME)" \
+        --set controller.resources.requests.cpu=1 \
+        --set controller.resources.requests.memory=1Gi \
+        --set controller.resources.limits.cpu=1 \
+        --set controller.resources.limits.memory=1Gi \
+        --wait
+      
+      export ALIAS_VERSION="$(aws ssm get-parameter --name "/aws/service/eks/optimized-ami/$(params.K8S_VERSION)/amazon-linux-2023/x86_64/standard/recommended/image_id" --query Parameter.Value | xargs aws ec2 describe-images --query 'Images[0].Name' --image-ids | sed -r 's/^.*(v[[:digit:]]+).*$/\1/')"
+
+      cat <<EOF | envsubst | kubectl apply -f -
+      apiVersion: karpenter.sh/v1
+      kind: NodePool
+      metadata:
+        name: default
+      spec:
+        template:
+          spec:
+            requirements:
+              - key: kubernetes.io/arch
+                operator: In
+                values: ["amd64"]
+              - key: kubernetes.io/os
+                operator: In
+                values: ["linux"]
+              - key: karpenter.sh/capacity-type
+                operator: In
+                values: ["on-demand"]
+              - key: karpenter.k8s.aws/instance-category
+                operator: In
+                values: ["c", "m", "r"]
+              - key: karpenter.k8s.aws/instance-generation
+                operator: Gt
+                values: ["2"]
+            nodeClassRef:
+              group: karpenter.k8s.aws
+              kind: EC2NodeClass
+              name: default
+            expireAfter: 720h # 30 * 24h = 720h
+        limits:
+          cpu: 1000
+        disruption:
+          consolidationPolicy: WhenEmptyOrUnderutilized
+          consolidateAfter: 1m
+      ---
+      apiVersion: karpenter.k8s.aws/v1
+      kind: EC2NodeClass
+      metadata:
+        name: default
+      spec:
+        role: "KarpenterNodeRole-$(params.CLUSTER_NAME)" 
+        amiSelectorTerms:
+          - alias: "al2023@${ALIAS_VERSION}"
+        subnetSelectorTerms:
+          - tags:
+              karpenter.sh/discovery: "$(params.CLUSTER_NAME)" 
+        securityGroupSelectorTerms:
+          - tags:
+              karpenter.sh/discovery: "$(params.CLUSTER_NAME)" 
+      EOF

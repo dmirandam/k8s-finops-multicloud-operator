@@ -5,9 +5,9 @@ metadata:
   namespace: tekton-pipelines
 type: Opaque
 stringData:
-  AWS_ACCESS_KEY_ID: "xxx"
-  AWS_SECRET_ACCESS_KEY: "xxx"
-  AWS_DEFAULT_REGION: "us-east-1"
+  AWS_ACCESS_KEY_ID: "xxxx"
+  AWS_SECRET_ACCESS_KEY: "xxxx"
+  AWS_DEFAULT_REGION: "us-west-2"
 
 ---
 

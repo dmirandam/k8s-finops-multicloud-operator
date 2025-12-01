@@ -1,11 +1,11 @@
 apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
 metadata:
-  name: karpenter-bootstrap-run14
+  name: karpenter-bootstrap-run-test10
   namespace: tekton-pipelines
 spec:
   pipelineRef:
-    name: karpenter-bootstrap
+    name: karpenter-bootstrap-test
   params:
   - name: CLUSTER_NAME
     value: tekton-karpenter2

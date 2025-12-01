@@ -110,7 +110,14 @@ success "Tekton installed and configured."
 header "Tekton Dashboard"
 run_step "Wait for tekton-pipelines namespace to be created" timeout 120 bash -c 'until kubectl get namespace tekton-pipelines >/dev/null 2>&1; do sleep 5; done'
 run_step "Wait for Tekton Dashboard deployment to be created" timeout 600 bash -c 'until kubectl get deployment tekton-dashboard -n tekton-pipelines >/dev/null 2>&1; do sleep 5; done'
-run_step "Wait for Tekton Dashboard to be ready" kubectl wait --for=condition=Available=True --timeout=300s deployment/tekton-dashboard -n tekton-pipelines
-run_step "Portforward Tekton Dashboard" kubectl port-forward -n tekton-pipelines svc/tekton-dashboard 9097:9097 &
+run_step "Wait for Tekton Dashboard to be ready" kubectl wait --for=condition=Available=True --t imeout=300s deployment/tekton-dashboard -n tekton-pipelines
 
+
+header "Karmada installation"
+
+run_step "Install Karmada CLI" curl -s https://raw.githubusercontent.com/karmada-io/karmada/master/hack/install-cli.sh | sudo bash -s kubectl-karmada
+
+
+
+run_step "Portforward Tekton Dashboard" kubectl port-forward -n tekton-pipelines svc/tekton-dashboard 9097:9097 &
 finish
