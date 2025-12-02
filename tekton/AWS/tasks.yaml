@@ -122,6 +122,7 @@ spec:
 
       eksctl create cluster -f - <<EOF
       ---
+
       apiVersion: eksctl.io/v1alpha5
       kind: ClusterConfig
       metadata:
@@ -130,6 +131,19 @@ spec:
         version: "$(params.K8S_VERSION)"
         tags:
           karpenter.sh/discovery: $(params.CLUSTER_NAME)
+
+      privateCluster:
+        enabled: true
+        skipEndpointCreation: true #TODO: test this
+
+      vpc:
+        id: "vpc-00535f569c02f67e8" #TODO: use a param
+        subnets:
+          private:
+            cluster-az-a:
+              id: "subnet-04b6a19de06b7b22a" #TODO: use a param
+            cluster-az-b:
+              id: "subnet-03292adb47b11120b" #TODO: use a param
 
       iam:
         withOIDC: true
@@ -147,6 +161,7 @@ spec:
         - system:bootstrappers
         - system:nodes
 
+      # 🔧 Nodegroups en las subnets privadas del cluster
       managedNodeGroups:
       - instanceType: m5.large
         amiFamily: AmazonLinux2023
@@ -154,9 +169,11 @@ spec:
         desiredCapacity: 2
         minSize: 1
         maxSize: 10
+        privateNetworking: true   # CRÍTICO: solo subnets privadas
 
       addons:
       - name: eks-pod-identity-agent
+
       EOF
 
 ---
