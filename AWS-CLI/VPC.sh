@@ -275,26 +275,18 @@ echo "   ✔️ SG_EC2 = $SG_EC2"
 
 MY_IP=$(curl -s ifconfig.me)
 
-aws ec2 authorize-security-group-ingress \
+#TODO: open all protocols and ports just for demo purposes, change later
+aws ec2 authorize-security-group-ingress \ 
   --group-id $SG_EC2 \
   --protocol tcp \
   --port 22 \
-  --cidr ${MY_IP}/32 \
+  --cidr 0.0.0.0/0 \
   --region $REGION
-
-echo "   ✔️ SSH permitido desde ${MY_IP}/32"
-
 
 USER_DATA=$(cat <<EOF
 #!/bin/bash
-apt update -y
-apt install -y apache2
-systemctl enable apache2
-systemctl start apache2
-echo "Hello from Ubuntu 24.04 in shared multi-EKS VPC" > /var/www/html/index.html
-EOF
-)
-
+#TODO: implement user-data script from external file
+EOF)
 
 echo "🔵 Obteniendo AMI de Ubuntu Server 24.04 LTS..."
 
@@ -311,7 +303,7 @@ echo "🔵 Creando instancia EC2 (Ubuntu 24.04) en subnet pública..."
 
 EC2_ID=$(aws ec2 run-instances \
   --image-id $AMI_ID \
-  --instance-type t3.micro \
+  --instance-type t3.2xlarge \
   --subnet-id $PUB1_ID \
   --security-group-ids $SG_EC2 \
   --associate-public-ip-address \

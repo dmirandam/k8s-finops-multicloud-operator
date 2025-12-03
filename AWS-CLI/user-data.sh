@@ -22,8 +22,8 @@ chmod 700 get_helm.sh
 
 curl -sfL https://get.k3s.io | sh -
 
-sudo chmod 777 /etc/rancher/k3s/k3s.yaml #Just for demo purposes only
-export KUBECONFIG="/etc/rancher/k3s/k3s.yaml"
+#sudo chmod 777 /etc/rancher/k3s/k3s.yaml #Just for demo purposes only
+#export KUBECONFIG="/etc/rancher/k3s/k3s.yaml"
 
 export AWS_ACCESS_KEY_ID="xxx"
 export AWS_SECRET_ACCESS_KEY="xxx"
@@ -31,3 +31,28 @@ export AWS_DEFAULT_REGION="us-west-2"
 
 git clone https://github.com/dmirandam/k8s-finops-multicloud-operator.git
 cd k8s-finops-multicloud-operator
+
+k3s kubectl apply -f https://storage.googleapis.com/tekton-releases/operator/latest/release.yaml
+k3s kubectl wait --for=condition=Available=True --timeout=300s deployment/tekton-operator -n tekton-operator
+k3s kubectl apply -f https://raw.githubusercontent.com/tektoncd/operator/main/config/crs/kubernetes/config/all/operator_v1alpha1_config_cr.yaml
+timeout 120 bash -c 'until k3s kubectl get namespace tekton-pipelines >/dev/null 2>&1; do sleep 5; done'
+timeout 600 bash -c 'until k3s kubectl get deployment tekton-dashboard -n tekton-pipelines >/dev/null 2>&1; do sleep 5; done'
+k3s kubectl wait --for=condition=Available=True --timeout=300s deployment/tekton-dashboard -n tekton-pipelines
+
+
+cat <<EOF | k3s kubectl apply -f -
+apiVersion: v1
+kind: Service
+metadata:
+  name: tekton-dashboard-nodeport
+  namespace: tekton-pipelines
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/component: dashboard
+  ports:
+    - name: http
+      port: 9097
+      targetPort: 9097
+      nodePort: 30097
+EOF
