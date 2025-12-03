@@ -1,3 +1,33 @@
 #!/bin/bash
-yum update -y
-echo "Hola desde user-data" > /home/ec2-user/bienvenida.txt
+
+
+
+sudo apt update
+
+sudo apt install unzip
+
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+chmod +x kubectl
+mkdir -p ~/.local/bin
+mv ./kubectl ~/.local/bin/kubectl
+
+curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-4
+chmod 700 get_helm.sh
+./get_helm.sh
+
+curl -sfL https://get.k3s.io | sh -
+
+sudo chmod 777 /etc/rancher/k3s/k3s.yaml #Just for demo purposes only
+export KUBECONFIG="/etc/rancher/k3s/k3s.yaml"
+
+export AWS_ACCESS_KEY_ID="xxx"
+export AWS_SECRET_ACCESS_KEY="xxx"
+export AWS_DEFAULT_REGION="us-west-2"
+
+git clone https://github.com/dmirandam/k8s-finops-multicloud-operator.git
+cd k8s-finops-multicloud-operator

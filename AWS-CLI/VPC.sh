@@ -33,6 +33,16 @@ echo "⏳ Esperando a que la VPC esté disponible..."
 aws ec2 wait vpc-available --vpc-ids $VPC_ID --region $REGION
 echo "   ✔️ VPC disponible"
 
+# 🔧 Habilitar DNS — requerido para endpoints Interface (STS, ECR, EC2, Logs)
+aws ec2 modify-vpc-attribute \
+  --vpc-id $VPC_ID \
+  --enable-dns-support "{\"Value\":true}" \
+  --region $REGION
+
+aws ec2 modify-vpc-attribute \
+  --vpc-id $VPC_ID \
+  --enable-dns-hostnames "{\"Value\":true}" \
+  --region $REGION
 
 aws ec2 create-tags \
   --resources $VPC_ID \
@@ -172,6 +182,62 @@ aws ec2 associate-route-table --route-table-id $RTB_PRIVATE --subnet-id $PVT_SHA
 
 echo "   ✔️ RTB_PRIVATE = $RTB_PRIVATE"
 
+
+S3_ENDPOINT_ID=$(aws ec2 create-vpc-endpoint \
+  --vpc-id $VPC_ID \
+  --service-name com.amazonaws.$REGION.s3 \
+  --vpc-endpoint-type Gateway \
+  --route-table-ids $RTB_PRIVATE \
+  --region $REGION \
+  --query 'VpcEndpoint.VpcEndpointId' \
+  --output text)
+
+SG_VPCE=$(aws ec2 create-security-group \
+  --group-name shared-vpce-sg \
+  --description "SG for VPC endpoints" \
+  --vpc-id $VPC_ID \
+  --region $REGION \
+  --query 'GroupId' \
+  --output text)
+
+aws ec2 authorize-security-group-ingress \
+  --group-id $SG_VPCE \
+  --protocol tcp \
+  --port 443 \
+  --cidr $VPC_CIDR \
+  --region $REGION
+
+for SERVICE in ec2 ecr.api ecr.dkr sts logs; do
+  aws ec2 create-vpc-endpoint \
+    --vpc-id $VPC_ID \
+    --service-name com.amazonaws.$REGION.$SERVICE \
+    --vpc-endpoint-type Interface \
+    --subnet-ids $PVT_SHARED1_ID $PVT_SHARED2_ID \
+    --security-group-ids $SG_VPCE \
+    --private-dns-enabled \
+    --region $REGION
+done
+
+
+echo "🔵 Creando Instance Connect Endpoint..."
+
+ICE_ID=$(aws ec2 create-instance-connect-endpoint \
+  --subnet-id $PVT_SHARED1_ID \
+  --security-group-ids $SG_VPCE \
+  --region $REGION \
+  --query 'InstanceConnectEndpoint.InstanceConnectEndpointId' \
+  --output text)
+
+echo "   ✔️ Instance Connect Endpoint creado: $ICE_ID"
+
+aws ec2 authorize-security-group-ingress \
+  --group-id $SG_VPCE \
+  --protocol tcp \
+  --port 22 \
+  --cidr $VPC_CIDR \
+  --region $REGION
+
+
 #############################################
 # 8. RESULTADOS
 #############################################
@@ -191,3 +257,76 @@ echo "====================================================="
 echo "Puedes usar esta VPC directamente en eksctl:"
 echo "vpc.id: \"$VPC_ID\""
 echo "====================================================="
+
+
+
+
+echo "🔵 Creando Security Group para la EC2 pública..."
+
+SG_EC2=$(aws ec2 create-security-group \
+  --group-name public-ec2-sg \
+  --description "Security Group for Public EC2 Access" \
+  --vpc-id $VPC_ID \
+  --region $REGION \
+  --query 'GroupId' \
+  --output text)
+
+echo "   ✔️ SG_EC2 = $SG_EC2"
+
+MY_IP=$(curl -s ifconfig.me)
+
+aws ec2 authorize-security-group-ingress \
+  --group-id $SG_EC2 \
+  --protocol tcp \
+  --port 22 \
+  --cidr ${MY_IP}/32 \
+  --region $REGION
+
+echo "   ✔️ SSH permitido desde ${MY_IP}/32"
+
+
+USER_DATA=$(cat <<EOF
+#!/bin/bash
+apt update -y
+apt install -y apache2
+systemctl enable apache2
+systemctl start apache2
+echo "Hello from Ubuntu 24.04 in shared multi-EKS VPC" > /var/www/html/index.html
+EOF
+)
+
+
+echo "🔵 Obteniendo AMI de Ubuntu Server 24.04 LTS..."
+
+AMI_ID=$(aws ssm get-parameter \
+    --name /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id \
+    --region $REGION \
+    --query "Parameter.Value" \
+    --output text)
+
+echo "   ✔️ AMI_ID = $AMI_ID"
+
+
+echo "🔵 Creando instancia EC2 (Ubuntu 24.04) en subnet pública..."
+
+EC2_ID=$(aws ec2 run-instances \
+  --image-id $AMI_ID \
+  --instance-type t3.micro \
+  --subnet-id $PUB1_ID \
+  --security-group-ids $SG_EC2 \
+  --associate-public-ip-address \
+  --user-data "$USER_DATA" \
+  --region $REGION \
+  --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=public-ubuntu-24}]" \
+  --query 'Instances[0].InstanceId' \
+  --output text)
+
+echo "   ✔️ EC2 creada con ID: $EC2_ID"
+
+EC2_PUBLIC_IP=$(aws ec2 describe-instances \
+  --instance-ids $EC2_ID \
+  --region $REGION \
+  --query "Reservations[0].Instances[0].PublicIpAddress" \
+  --output text)
+
+echo "   🌐 EC2 Public IP: $EC2_PUBLIC_IP"
