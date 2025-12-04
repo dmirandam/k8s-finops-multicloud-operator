@@ -5,6 +5,7 @@ set -euo pipefail
 # CONFIGURACIÓN DEL USUARIO
 #############################################
 
+export AWS_PAGER=cat
 REGION="us-west-2"
 AZ1="us-west-2a"
 AZ2="us-west-2b"
@@ -276,17 +277,76 @@ echo "   ✔️ SG_EC2 = $SG_EC2"
 MY_IP=$(curl -s ifconfig.me)
 
 #TODO: open all protocols and ports just for demo purposes, change later
-aws ec2 authorize-security-group-ingress \ 
+aws ec2 authorize-security-group-ingress \
   --group-id $SG_EC2 \
   --protocol tcp \
   --port 22 \
   --cidr 0.0.0.0/0 \
   --region $REGION
 
-USER_DATA=$(cat <<EOF
-#!/bin/bash
-#TODO: implement user-data script from external file
-EOF)
+echo "🔵 Creando IAM Role para la EC2..."
+
+aws iam create-role \
+  --role-name ec2-admin-role \
+  --assume-role-policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Principal": { "Service": "ec2.amazonaws.com" },
+        "Action": "sts:AssumeRole"
+      }
+    ]
+  }' \
+  --region $REGION
+
+aws iam attach-role-policy \
+  --role-name ec2-admin-role \
+  --policy-arn arn:aws:iam::aws:policy/AdministratorAccess \
+  --region $REGION
+
+# aws iam remove-role-from-instance-profile --instance-profile-name ec2-admin-instance-profile --role-name ec2-admin-role
+
+# aws iam detach-role-policy \
+#   --role-name ec2-admin-role \
+#   --policy-arn arn:aws:iam::aws:policy/AdministratorAccess
+
+# aws iam delete-role-policy --role-name ec2-admin-role --policy-name AdministratorAccess
+# aws iam delete-role --role-name ec2-admin-role 
+# aws iam delete-instance-profile --instance-profile-name ec2-admin-instance-profile
+
+aws iam create-instance-profile \
+  --instance-profile-name ec2-admin-instance-profile \
+  --region $REGION
+
+aws iam add-role-to-instance-profile \
+  --instance-profile-name ec2-admin-instance-profile \
+  --role-name ec2-admin-role \
+  --region $REGION
+
+sleep 60
+
+echo "⏳ Esperando a que el Instance Profile adjunte el role..."
+
+# Polling hasta que aparezca el role dentro del profile
+for i in {1..10}; do
+  ROLE_COUNT=$(aws iam get-instance-profile \
+    --instance-profile-name ec2-admin-instance-profile \
+    --query 'InstanceProfile.Roles | length(@)' \
+    --output text)
+
+  if [[ "$ROLE_COUNT" -gt 0 ]]; then
+    echo "   ✔️ Role adjuntado correctamente al Instance Profile"
+    break
+  fi
+
+  echo "   ⏳ Role no adjunto aún. Intento $i/10..."
+  sleep 3
+done
+
+aws iam get-instance-profile \
+  --instance-profile-name ec2-admin-instance-profile \
+  --region $REGION
 
 echo "🔵 Obteniendo AMI de Ubuntu Server 24.04 LTS..."
 
@@ -301,13 +361,17 @@ echo "   ✔️ AMI_ID = $AMI_ID"
 
 echo "🔵 Creando instancia EC2 (Ubuntu 24.04) en subnet pública..."
 
+
+#set storage to 50 GB
 EC2_ID=$(aws ec2 run-instances \
   --image-id $AMI_ID \
   --instance-type t3.2xlarge \
   --subnet-id $PUB1_ID \
   --security-group-ids $SG_EC2 \
   --associate-public-ip-address \
-  --user-data "$USER_DATA" \
+  --user-data file://user-data.sh \
+  --iam-instance-profile Name=ec2-admin-instance-profile \
+  --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":50,"VolumeType":"gp3","DeleteOnTermination":true}}]' \
   --region $REGION \
   --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=public-ubuntu-24}]" \
   --query 'Instances[0].InstanceId' \
