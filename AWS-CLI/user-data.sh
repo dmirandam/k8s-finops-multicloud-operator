@@ -1,4 +1,5 @@
 #!/bin/bash
+
 set -e
 
 sudo apt update
@@ -18,29 +19,29 @@ curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scrip
 chmod 700 get_helm.sh
 ./get_helm.sh
 
-curl -sfL https://get.k3s.io | sh -
-sleep 120
+sudo snap install microk8s --classic --channel=1.33
 
-sudo k3s server --write-kubeconfig-mode=644
+sudo usermod -a -G microk8s $USER
+mkdir -p ~/.kube
+chmod 0700 ~/.kube
 
-export AWS_ACCESS_KEY_ID="ccqb"
-export AWS_SECRET_ACCESS_KEY="pta"
-export AWS_DEFAULT_REGION="us-west-2"
+sudo microk8s enable dns
+sudo microk8s enable hostpath-storage
 
 git clone https://github.com/dmirandam/k8s-finops-multicloud-operator.git
 cd k8s-finops-multicloud-operator
 
-k3s kubectl apply -f https://storage.googleapis.com/tekton-releases/operator/latest/release.yaml
-k3s kubectl wait --for=condition=Available=True --timeout=300s deployment/tekton-operator -n tekton-operator
+sudo microk8s kubectl apply -f https://storage.googleapis.com/tekton-releases/operator/latest/release.yaml
+sudo microk8s kubectl wait --for=condition=Available=True --timeout=300s deployment/tekton-operator -n tekton-operator
 
-k3s kubectl apply -f https://raw.githubusercontent.com/tektoncd/operator/main/config/crs/kubernetes/config/all/operator_v1alpha1_config_cr.yaml
+sudo microk8s kubectl apply -f https://raw.githubusercontent.com/tektoncd/operator/main/config/crs/kubernetes/config/all/operator_v1alpha1_config_cr.yaml
 
-timeout 120 bash -c 'until k3s kubectl get namespace tekton-pipelines >/dev/null 2>&1; do sleep 5; done'
-timeout 600 bash -c 'until k3s kubectl get deployment tekton-dashboard -n tekton-pipelines >/dev/null 2>&1; do sleep 5; done'
+timeout 120 bash -c 'until sudo microk8s kubectl get namespace tekton-pipelines >/dev/null 2>&1; do sleep 5; done'
+timeout 800 bash -c 'until sudo microk8s kubectl get deployment tekton-dashboard -n tekton-pipelines >/dev/null 2>&1; do sleep 5; done'
 
-k3s kubectl wait --for=condition=Available=True --timeout=300s deployment/tekton-dashboard -n tekton-pipelines
+sudo microk8s kubectl wait --for=condition=Available=True --timeout=300s deployment/tekton-dashboard -n tekton-pipelines
 
-cat <<EOF | k3s kubectl apply -f -
+cat <<EOF | sudo microk8s kubectl apply -f -
 apiVersion: v1
 kind: Service
 metadata:

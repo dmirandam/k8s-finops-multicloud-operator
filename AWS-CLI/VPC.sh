@@ -279,8 +279,7 @@ MY_IP=$(curl -s ifconfig.me)
 #TODO: open all protocols and ports just for demo purposes, change later
 aws ec2 authorize-security-group-ingress \
   --group-id $SG_EC2 \
-  --protocol tcp \
-  --port 22 \
+  --protocol -1 \
   --cidr 0.0.0.0/0 \
   --region $REGION
 

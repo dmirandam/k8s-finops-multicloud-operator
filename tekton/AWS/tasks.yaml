@@ -10,23 +10,7 @@ spec:
   - name: output
   steps:
   - name: download
-    image: psiquedelos/kfo-tekton:1.1.0
-    env:
-    - name: AWS_ACCESS_KEY_ID
-      valueFrom:
-        secretKeyRef:
-          name: aws-credentials
-          key: AWS_ACCESS_KEY_ID
-    - name: AWS_SECRET_ACCESS_KEY
-      valueFrom:
-        secretKeyRef:
-          name: aws-credentials
-          key: AWS_SECRET_ACCESS_KEY
-    - name: AWS_DEFAULT_REGION
-      valueFrom:
-        secretKeyRef:
-          name: aws-credentials
-          key: AWS_DEFAULT_REGION    
+    image: psiquedelos/kfo-tekton:1.1.0 
     script: |
       #!/usr/bin/env sh
       curl -fsSL "https://raw.githubusercontent.com/aws/karpenter-provider-aws/v$(params.KARPENTER_VERSION)/website/content/en/preview/getting-started/getting-started-with-karpenter/cloudformation.yaml" \
@@ -51,23 +35,7 @@ spec:
   - name: output
   steps:
   - name: deploy
-    image: psiquedelos/kfo-tekton:1.1.0
-    env:
-    - name: AWS_ACCESS_KEY_ID
-      valueFrom:
-        secretKeyRef:
-          name: aws-credentials
-          key: AWS_ACCESS_KEY_ID
-    - name: AWS_SECRET_ACCESS_KEY
-      valueFrom:
-        secretKeyRef:
-          name: aws-credentials
-          key: AWS_SECRET_ACCESS_KEY
-    - name: AWS_DEFAULT_REGION
-      valueFrom:
-        secretKeyRef:
-          name: aws-credentials
-          key: AWS_DEFAULT_REGION    
+    image: psiquedelos/kfo-tekton:1.1.0  
     script: |
       #!/usr/bin/env sh
 
@@ -96,27 +64,14 @@ spec:
   - name: AWS_PARTITION
   - name: AWS_ACCOUNT_ID
   - name: AWS_REGION
+  - name: VPC_ID
+  - name: SUBNET_A_ID
+  - name: SUBNET_B_ID
   workspaces:
   - name: output  
   steps:
   - name: run-eksctl
-    image: psiquedelos/kfo-tekton:1.1.0
-    env:
-    - name: AWS_ACCESS_KEY_ID
-      valueFrom:
-        secretKeyRef:
-          name: aws-credentials
-          key: AWS_ACCESS_KEY_ID
-    - name: AWS_SECRET_ACCESS_KEY
-      valueFrom:
-        secretKeyRef:
-          name: aws-credentials
-          key: AWS_SECRET_ACCESS_KEY
-    - name: AWS_DEFAULT_REGION
-      valueFrom:
-        secretKeyRef:
-          name: aws-credentials
-          key: AWS_DEFAULT_REGION    
+    image: psiquedelos/kfo-tekton:1.1.0 
     script: |
       #!/usr/bin/env sh
 
@@ -134,16 +89,16 @@ spec:
 
       privateCluster:
         enabled: true
-        skipEndpointCreation: true #TODO: test this
+        skipEndpointCreation: true
 
       vpc:
-        id: "vpc-00535f569c02f67e8" #TODO: use a param
+        id: "$(params.VPC_ID)" #TODO: use a param
         subnets:
           private:
             cluster-az-a:
-              id: "subnet-04b6a19de06b7b22a" #TODO: use a param
+              id: "$(params.SUBNET_A_ID)" #TODO: use a param
             cluster-az-b:
-              id: "subnet-03292adb47b11120b" #TODO: use a param
+              id: "$(params.SUBNET_B_ID)" #TODO: use a param
 
       iam:
         withOIDC: true
@@ -192,23 +147,7 @@ spec:
   - name: output  
   steps:
   - name: info
-    image: psiquedelos/kfo-tekton:1.1.0
-    env:
-    - name: AWS_ACCESS_KEY_ID
-      valueFrom:
-        secretKeyRef:
-          name: aws-credentials
-          key: AWS_ACCESS_KEY_ID
-    - name: AWS_SECRET_ACCESS_KEY
-      valueFrom:
-        secretKeyRef:
-          name: aws-credentials
-          key: AWS_SECRET_ACCESS_KEY
-    - name: AWS_DEFAULT_REGION
-      valueFrom:
-        secretKeyRef:
-          name: aws-credentials
-          key: AWS_DEFAULT_REGION    
+    image: psiquedelos/kfo-tekton:1.1.0  
     script: |
       #!/usr/bin/env sh
 
@@ -240,23 +179,7 @@ spec:
   - name: output  
   steps:
   - name: karpenter-install
-    image: psiquedelos/kfo-tekton:1.1.0
-    env:
-    - name: AWS_ACCESS_KEY_ID
-      valueFrom:
-        secretKeyRef:
-          name: aws-credentials
-          key: AWS_ACCESS_KEY_ID
-    - name: AWS_SECRET_ACCESS_KEY
-      valueFrom:
-        secretKeyRef:
-          name: aws-credentials
-          key: AWS_SECRET_ACCESS_KEY
-    - name: AWS_DEFAULT_REGION
-      valueFrom:
-        secretKeyRef:
-          name: aws-credentials
-          key: AWS_DEFAULT_REGION    
+    image: psiquedelos/kfo-tekton:1.1.0  
     script: |
       #!/usr/bin/env sh
       aws eks update-kubeconfig \

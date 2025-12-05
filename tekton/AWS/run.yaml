@@ -11,6 +11,14 @@ spec:
     value: tekton-karpenter9992
   - name: AWS_ACCOUNT_ID
     value: "379151433856"
+  - name: AWS_DEFAULT_REGION
+    value: us-west-2
+  - name: VPC_ID
+    value: vpc-0bb1c79de3EXAMPLE
+  - name: SUBNET_A_ID
+    value: subnet-0bb1c79de3EXAMPLE
+  - name: SUBNET_B_ID
+    value: subnet-0bb1c79de3EXAMPLE
   workspaces:
   - name: output
     emptyDir: {}

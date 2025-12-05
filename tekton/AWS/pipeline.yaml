@@ -69,6 +69,12 @@ spec:
       value: $(params.AWS_ACCOUNT_ID)
     - name: AWS_REGION
       value: $(params.AWS_DEFAULT_REGION)
+    - name: VPC_ID
+      value: $(params.VPC_ID)
+    - name: SUBNET_A_ID
+      value: $(params.SUBNET_A_ID)
+    - name: SUBNET_B_ID
+      value: $(params.SUBNET_B_ID)
 
   - name: fetch-info
     runAfter: [create-eks-cluster]
