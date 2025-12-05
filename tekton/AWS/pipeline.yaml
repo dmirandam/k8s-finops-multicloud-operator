@@ -17,6 +17,9 @@ spec:
     default: "us-west-2"
   - name: CLUSTER_NAME
   - name: AWS_ACCOUNT_ID
+  - name: VPC_ID
+  - name: SUBNET_A_ID
+  - name: SUBNET_B_ID
 
   workspaces:
   - name: output  
