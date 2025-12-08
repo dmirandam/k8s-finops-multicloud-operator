@@ -28,6 +28,8 @@ chmod 0700 ~/.kube
 sudo microk8s enable dns
 sudo microk8s enable hostpath-storage
 
+sudo microk8s config > ~/.kube/config
+
 git clone https://github.com/dmirandam/k8s-finops-multicloud-operator.git
 cd k8s-finops-multicloud-operator
 
@@ -57,3 +59,7 @@ spec:
       targetPort: 9097
       nodePort: 30097
 EOF
+
+
+sudo microk8s kubectl apply -f k8s-finops-multicloud-operator/tekton/AWS/tasks.yaml
+sudo microk8s kubectl apply -f k8s-finops-multicloud-operator/tekton/AWS/pipeline.yaml
