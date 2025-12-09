@@ -85,20 +85,20 @@ spec:
         region: $(params.AWS_REGION)
         version: "$(params.K8S_VERSION)"
         tags:
-          karpenter.sh/discovery: $(params.CLUSTER_NAME)
+          karpenter.sh/discovery: kfo #$(params.CLUSTER_NAME)
 
       privateCluster:
         enabled: true
         skipEndpointCreation: true
 
       vpc:
-        id: "$(params.VPC_ID)" #TODO: use a param
+        id: "$(params.VPC_ID)" 
         subnets:
           private:
             cluster-az-a:
-              id: "$(params.SUBNET_A_ID)" #TODO: use a param
+              id: "$(params.SUBNET_A_ID)" 
             cluster-az-b:
-              id: "$(params.SUBNET_B_ID)" #TODO: use a param
+              id: "$(params.SUBNET_B_ID)"
 
       iam:
         withOIDC: true
@@ -116,15 +116,14 @@ spec:
         - system:bootstrappers
         - system:nodes
 
-      # 🔧 Nodegroups en las subnets privadas del cluster
       managedNodeGroups:
       - instanceType: m5.large
         amiFamily: AmazonLinux2023
         name: $(params.CLUSTER_NAME)-ng
-        desiredCapacity: 2
+        desiredCapacity: 1
         minSize: 1
         maxSize: 10
-        privateNetworking: true   # CRÍTICO: solo subnets privadas
+        privateNetworking: true   # IMPORTANT: Ensure nodes are created in private subnets
 
       addons:
       - name: eks-pod-identity-agent
@@ -175,6 +174,7 @@ spec:
   - name: AWS_DEFAULT_REGION
   - name: KARPENTER_NAMESPACE
   - name: K8S_VERSION
+  - name: CAPACITY_TYPE
   workspaces:
   - name: output  
   steps:
@@ -219,7 +219,7 @@ spec:
                 values: ["linux"]
               - key: karpenter.sh/capacity-type
                 operator: In
-                values: ["on-demand"]
+                values: ["$(params.CAPACITY_TYPE)"]
               - key: karpenter.k8s.aws/instance-category
                 operator: In
                 values: ["c", "m", "r"]
@@ -230,9 +230,9 @@ spec:
               group: karpenter.k8s.aws
               kind: EC2NodeClass
               name: default
-            expireAfter: 720h # 30 * 24h = 720h
+            expireAfter: 5m
         limits:
-          cpu: 1000
+          cpu: 100
         disruption:
           consolidationPolicy: WhenEmptyOrUnderutilized
           consolidateAfter: 1m
@@ -247,8 +247,32 @@ spec:
           - alias: "al2023@${ALIAS_VERSION}"
         subnetSelectorTerms:
           - tags:
-              karpenter.sh/discovery: "$(params.CLUSTER_NAME)" 
+              karpenter.sh/discovery: kfo #$(params.CLUSTER_NAME)
         securityGroupSelectorTerms:
           - tags:
-              karpenter.sh/discovery: "$(params.CLUSTER_NAME)" 
+              karpenter.sh/discovery: $(params.CLUSTER_NAME)
       EOF
+
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: create-storage-class
+  namespace: tekton-pipelines
+spec:
+  params:
+  - name: STORAGE_CLASS_NAME
+  workspaces:
+  - name: output  
+  steps:
+  - name: create-sc
+    image: psiquedelos/kfo-tekton:1.1.0  
+    script: |
+      #!/usr/bin/env sh
+      aws eks update-kubeconfig \
+        --region $(params.AWS_DEFAULT_REGION) \
+        --name $(params.CLUSTER_NAME) \
+        --kubeconfig /tekton/home/.kube/config
+
+      export KUBECONFIG=/tekton/home/.kube/config      

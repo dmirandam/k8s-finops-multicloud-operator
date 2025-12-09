@@ -20,6 +20,8 @@ spec:
   - name: VPC_ID
   - name: SUBNET_A_ID
   - name: SUBNET_B_ID
+  - name: CAPACITY_TYPE
+    default: "spot"
 
   workspaces:
   - name: output  

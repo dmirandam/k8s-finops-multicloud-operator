@@ -1,2 +1,0 @@
-# KFO
-Kubernetes FinOps Operator

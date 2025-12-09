@@ -292,7 +292,7 @@ header " VPC Result Summary"
 
 echo ""
 echo "====================================================="
-echo " VPC successfully created and configured"
+echo " VPC created and configured"
 echo "====================================================="
 echo "VPC_ID:              $VPC_ID"
 echo "IGW_ID:              $IGW_ID"
@@ -444,7 +444,7 @@ header "Public EC2 Instance"
 step "Launching public EC2 instance (Ubuntu 24.04)..."
 EC2_ID=$(aws ec2 run-instances \
   --image-id $AMI_ID \
-  --instance-type t3.   xlarge \
+  --instance-type t3.xlarge \
   --subnet-id $PUB1_ID \
   --security-group-ids $SG_EC2 \
   --associate-public-ip-address \
@@ -465,3 +465,115 @@ EC2_PUBLIC_IP=$(aws ec2 describe-instances \
   --output text)
 
 info "Public EC2 IP Address: $EC2_PUBLIC_IP"
+
+
+header "EFS for EKS - Automated Creation"
+
+step "Creating EFS File System..."
+EFS_ID=$(aws efs create-file-system \
+  --region $REGION \
+  --performance-mode generalPurpose \
+  --throughput-mode bursting \
+  --query 'FileSystemId' \
+  --output text)
+
+success "EFS FileSystem created: $EFS_ID"
+
+step "Tagging EFS FileSystem..."
+aws efs tag-resource \
+  --resource-id $EFS_ID \
+  --tags Key=Name,Value=kfo-efs \
+  --region $REGION
+
+step "Creating EFS Security Group..."
+SG_EFS=$(aws ec2 create-security-group \
+  --group-name efs-sg \
+  --description "Security Group for EFS" \
+  --vpc-id $VPC_ID \
+  --region $REGION \
+  --query 'GroupId' \
+  --output text)
+
+aws ec2 authorize-security-group-ingress \
+  --group-id $SG_EFS \
+  --protocol tcp \
+  --port 2049 \
+  --cidr $VPC_CIDR \
+  --region $REGION
+
+success "SG_EFS = $SG_EFS"
+
+step "Creating Mount Targets for EFS..."
+MT1=$(aws efs create-mount-target \
+  --file-system-id $EFS_ID \
+  --subnet-id $PVT_SHARED1_ID \
+  --security-groups $SG_EFS \
+  --region $REGION \
+  --query 'MountTargetId' \
+  --output text)
+
+MT2=$(aws efs create-mount-target \
+  --file-system-id $EFS_ID \
+  --subnet-id $PVT_SHARED2_ID \
+  --security-groups $SG_EFS \
+  --region $REGION \
+  --query 'MountTargetId' \
+  --output text)
+
+success "Mount Targets created: $MT1, $MT2"
+
+step "Waiting for Mount Targets to become available..."
+
+for MT in "$MT1" "$MT2"; do
+  while true; do
+    STATE=$(aws efs describe-mount-targets \
+      --mount-target-id "$MT" \
+      --region "$REGION" \
+      --query 'MountTargets[0].LifeCycleState' \
+      --output text)
+
+    echo "Mount target $MT state: $STATE"
+
+    if [[ "$STATE" == "available" ]]; then
+      break
+    fi
+
+    sleep 5
+  done
+done
+
+success "EFS mount targets are available."
+
+
+success "EFS fully ready."
+
+header "EFS Summary"
+echo ""
+echo "============================================="
+echo " EFS Created and Ready"
+echo "============================================="
+echo "EFS_ID:           $EFS_ID"
+echo "EFS_SG:           $SG_EFS"
+echo "MountTarget AZ1:  $MT1"
+echo "MountTarget AZ2:  $MT2"
+echo "============================================="
+
+
+header "Creating Global IAM Policy for EFS CSI Driver"
+
+
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+aws iam create-policy \
+  --policy-name $POLICY_NAME \
+  --policy-document file://efs-csi-policy.json \
+  2>/dev/null \
+  || echo "Policy $POLICY_NAME already exists. Skipping."
+
+POLICY_ARN="arn:aws:iam::$ACCOUNT_ID:policy/$POLICY_NAME"
+
+echo ""
+echo "✔ Global EFS CSI IAM Policy created or already exists."
+echo "✔ POLICY ARN = $POLICY_ARN"
+echo ""
+echo "Run the per-cluster setup script for each new EKS cluster."

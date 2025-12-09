@@ -31,7 +31,6 @@ sudo microk8s enable hostpath-storage
 sudo microk8s config > ~/.kube/config
 
 git clone https://github.com/dmirandam/k8s-finops-multicloud-operator.git
-cd k8s-finops-multicloud-operator
 
 sudo microk8s kubectl apply -f https://storage.googleapis.com/tekton-releases/operator/latest/release.yaml
 sudo microk8s kubectl wait --for=condition=Available=True --timeout=300s deployment/tekton-operator -n tekton-operator
@@ -61,5 +60,5 @@ spec:
 EOF
 
 
-sudo microk8s kubectl apply -f k8s-finops-multicloud-operator/tekton/AWS/tasks.yaml
-sudo microk8s kubectl apply -f k8s-finops-multicloud-operator/tekton/AWS/pipeline.yaml
+sudo microk8s kubectl apply -f /k8s-finops-multicloud-operator/tekton/AWS/tasks.yaml
+sudo microk8s kubectl apply -f /k8s-finops-multicloud-operator/tekton/AWS/pipeline.yaml

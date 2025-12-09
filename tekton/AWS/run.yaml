@@ -17,10 +17,8 @@ spec:
     value: subnet-0bb1c79de3EXAMPLE
   - name: SUBNET_B_ID
     value: subnet-0bb1c79de3EXAMPLE
+  - name: CAPACITY_TYPE
+    value: spot # or on-demand
   workspaces:
   - name: output
-    emptyDir: {}
-  serviceAccountName: tekton-aws-runner
-
-
-  
+    emptyDir: {} 
