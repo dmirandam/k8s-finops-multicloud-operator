@@ -9,7 +9,7 @@ metadata:
   name: nginx-heavy
   namespace: nginx-heavy-poc
 spec:
-  replicas: 6   # luego Karmada lo divide en los clusters
+  replicas: 50
   selector:
     matchLabels:
       app: nginx-heavy
