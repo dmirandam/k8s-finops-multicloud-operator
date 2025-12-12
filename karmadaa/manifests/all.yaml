@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nginx-heavy-poc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-heavy
+  namespace: nginx-heavy-poc
+spec:
+  replicas: 6   # luego Karmada lo divide en los clusters
+  selector:
+    matchLabels:
+      app: nginx-heavy
+  template:
+    metadata:
+      labels:
+        app: nginx-heavy
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.27
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "2"         
+            memory: "4Gi"    
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-heavy-lb
+  namespace: nginx-heavy-poc
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+spec:
+  selector:
+    app: nginx-heavy
+  type: LoadBalancer
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+---
+apiVersion: policy.karmada.io/v1alpha1
+kind: PropagationPolicy
+metadata:
+  name: nginx-heavy-policy
+  namespace: nginx-heavy-poc
+spec:
+  resourceSelectors:
+    - apiVersion: v1
+      kind: Namespace
+      name: nginx-heavy-poc
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: nginx-heavy
+      namespace: nginx-heavy-poc
+    - apiVersion: v1
+      kind: Service
+      name: nginx-heavy-lb
+      namespace: nginx-heavy-poc
+
+  placement:
+    clusterAffinity:
+      clusterNames:
+        - member1
+        - member2
+    replicaScheduling:
+      replicaSchedulingType: Divided
+      replicaDivisionPreference: Weighted
+      weightPreference:
+        staticWeightList:
+          - targetCluster:
+              clusterNames: [ "member1" ]
+            weight: 1
+          - targetCluster:
+              clusterNames: [ "member2" ]
+            weight: 1
+---
+# apiVersion: policy.karmada.io/v1alpha1
+# kind: OverridePolicy
+# metadata:
+#   name: nginx-heavy-override
+#   namespace: nginx-heavy-poc
+# spec:
+#   resourceSelectors:
+#     - apiVersion: apps/v1
+#       kind: Deployment
+#       name: nginx-heavy
+#       namespace: nginx-heavy-poc
+#   overrideRules:
+#   - targetCluster:
+#       clusterNames: ["member2"]
+#     overriders:
+#       affinityOverrider:
+#       - operator: add
+#         value:
+#           nodeAffinity:
+#             requiredDuringSchedulingIgnoredDuringExecution:
+#               nodeSelectorTerms:
+#               - matchExpressions:
+#                 - key: karpenter.sh/capacity-type
+#                   operator: In
+#                   values: ["spot"]\
