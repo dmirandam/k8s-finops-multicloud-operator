@@ -114,3 +114,5 @@ spec:
       value: $(params.AWS_DEFAULT_REGION)
     - name: K8S_VERSION
       value: $(params.K8S_VERSION)
+    - name: CAPACITY_TYPE
+      value: $(params.CAPACITY_TYPE)
